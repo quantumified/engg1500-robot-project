@@ -2,9 +2,10 @@
 import time
 import _thread
 import asyncio
-from machine import Pin
+from machine import Pin, SoftI2C
 from motor import Motor
 from ultrasonic import sonic
+import ssd1306
 
 # Setup sensors and motors
 right_IR  = Pin(22, Pin.IN)
@@ -26,6 +27,29 @@ insidewheel = 35
 collisiondist = 50 # mm 
 centretollerance = 0.2 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
+
+# OLED bullshit
+#You can choose any other combination of I2C pins
+i2c = SoftI2C(scl=Pin(5), sda=Pin(4))
+
+# Creates an object for the display using the class in the ssd1306 driver
+oled_width = 128
+oled_height = 64
+oled = ssd1306.SSD1306_I2C(oled_width, oled_height, i2c)
+
+oled.text('Left', 0, 0)
+oled.text('Mid', 50, 0)
+oled.text('Right', 90, 0)
+oled.text("Current Function", 0, 30)
+oled.invert(True)
+oled.show()
+
+def print_oled():
+    oled.fill(0)
+    oled.text(str(left_IR.value()), 0, 10)
+    oled.text(str(middle_IR.value()), 50, 10)
+    oled.text(str(right_IR.value()), 90, 10)
+    oled.show()
 
 def second_thread():
     asyncio.run(read_IR_sensors())
@@ -72,6 +96,9 @@ async def read_middle_IR_sensor():
 
 # Check front ultrasonic only false if clear
 def check_collision():
+    print_oled()
+    oled.text("check collision", 0, 40)
+    oled.show()
     front_mm = ultrasonic_front.distance_mm()
     if front_mm < 0: #error
         print("ERROR: negative ultrasonic dist, continuing")
@@ -90,6 +117,9 @@ def drive_forward():
     motor_right.duty(slow)
 
 def follow_line():
+    print_oled()
+    oled.text("follow line", 0, 40)
+    oled.show()
     print("follow line running")
     while not check_collision(): # true setzen + die wartezeit etwas hochsetzen unten
         # Centred: go straight 
@@ -124,6 +154,9 @@ def follow_line():
 
 
 def handle_stub(side):
+    print_oled()
+    oled.text("handle stub", 0, 40)
+    oled.show()
     print(f"Stub detected ({side})")
     if check_collision(): # True = collision
         return
@@ -142,6 +175,9 @@ def handle_stub(side):
         return
 
 def detect_y_intersection(side):
+    print_oled()
+    oled.text("y intersection", 0, 40)
+    oled.show()
     stop()
     print(f"Y Intersection detected: taking {side} path.")
     time.sleep(0.1)
@@ -195,18 +231,27 @@ def detect_y_intersection(side):
     motor_right.duty(slow)
 
 def no_line():
+    print_oled()
+    oled.text("no line", 0, 40)
+    oled.show()
     stop()
     print("No line.")
     time.sleep(0.2)
     # Use ultrasonics
     
 def stop():
+    print_oled()
+    oled.text("stop", 0, 40)
+    oled.show()
     motor_left.duty(0)
     motor_right.duty(0)
     
 # Detection
 def process_sensors():
-    stop()
+    print_oled()
+    oled.text("processing sensors", 0, 40)
+    oled.show()
+    print_oled()
     if left_IR_active == 0 and right_IR_active == 0 and middle_IR_active == 1: # Go straight
         follow_line()
     elif left_IR_active == 1 and right_IR_active == 1 and middle_IR_active == 1: #handle roundabout
@@ -248,6 +293,9 @@ def turn_vehicle(direction):
         motor_left.duty(0)
         
 def roundabout():
+    print_oled()
+    oled.text("roundabout", 0, 40)
+    oled.show()
     print("Roundabout detected")
     stop()
     direction = select_direction()
@@ -296,3 +344,4 @@ while True:
         process_sensors() # need to ensure follow_line is disabled/cancelled when another function is triggered ASAP!
     else:
         stop()
+
