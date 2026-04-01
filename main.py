@@ -91,7 +91,7 @@ def drive_forward():
 
 def follow_line():
     print("follow line running")
-    while not check_collision(): true setzen + die wartezeit etwas hochsetzen unten
+    while not check_collision(): # true setzen + die wartezeit etwas hochsetzen unten
         # Centred: go straight 
         if middle_IR_active == 1 and left_IR_active == 0 and right_IR_active == 0:
             motor_left.set_forwards()
@@ -199,6 +199,10 @@ def no_line():
     print("No line.")
     time.sleep(0.2)
     # Use ultrasonics
+    
+def stop():
+    motor_left.duty(0)
+    motor_right.duty(0)
     
 # Detection
 def process_sensors():
