@@ -194,13 +194,54 @@ def detect_y_intersection(side):
     motor_right.duty(slow)
 
 def no_line():
+    # Announcements
     print_oled()
     oled.text("no line", 0, 40)
     oled.show()
-    stop()
-    print("No line.")
-    time.sleep(0.2)
-    # Use ultrasonics
+    print("No line: ultrasonic sensing")
+
+    while True:
+        if check_collision():
+            return
+
+        left_mm = ultrasonic_left.distance_mm()
+        right_mm = ultrasonic_right.distance_mm()
+        # Check no issues
+        if left_mm <= 0 or right_mm <= 0:
+            print("Ultrasonic error, skipping cycle")
+            continue
+
+        # Ratio (1.0 = perfectly centered)
+        ratio = left_mm / right_mm
+        # Within tolerance, then continue
+        if (1 - centretollerance) <= ratio <= (1 + centretollerance):
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+
+        # Steer right
+        elif ratio < (1 - centretollerance):
+            motor_left.set_backwards()
+            motor_right.set_forwards()
+            motor_left.duty(slow) 
+            motor_right.duty(slow)  
+
+        # Steer left
+        elif ratio > (1 + centretollerance):
+            motor_left.set_forwards()
+            motor_right.set_backwards()
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+
+        time.sleep(ontime)
+        stop()
+        time.sleep(offtime)
+
+        # Cancel if line is found again
+        if middle_IR.value() == 1 or left_IR.value() == 1 or right_IR.value() == 1:
+            print("Line reacquired")
+            return
     
 def stop():
     print_oled()
