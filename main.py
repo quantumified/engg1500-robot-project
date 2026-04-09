@@ -6,9 +6,11 @@ from ultrasonic import sonic
 import ssd1306
 
 # Setup sensors and motors
-right_IR  = Pin(22, Pin.IN)
 middle_IR = Pin(21, Pin.IN)
-left_IR   = Pin(20, Pin.IN)
+center_right_IR = Pin(22, Pin.IN)
+center_left_IR = Pin(20, Pin.IN)
+outer_right_IR = Pin(18, Pin.IN)
+outer_left_IR = Pin(19, Pin.IN)
 motor_left  = Motor("Left", 11, 10, 7) #probably need to find way to make them slower without duty reduction, maybe make a pwm of a pwm??
 motor_right = Motor("Right", 9, 8, 6)
 ultrasonic_front = sonic(3, 2)
@@ -23,10 +25,10 @@ slow = 40
 outsidewheel = 45
 insidewheel = 35
 collisiondist = 50 # mm 
-centretollerance = 0.15 # tolerance for left/right ratio for no_line
+centretollerance = 0.2 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.02
-offtime = 0.03
+offtime = 0.01
 
 # OLED bullshit
 #You can choose any other combination of I2C pins
@@ -80,14 +82,14 @@ def follow_line():
     print("follow line running")
     while not check_collision():
         # Centred: go straight 
-        if middle_IR.value() == 1 and left_IR.value() == 0 and right_IR.value() == 0:
+        if middle_IR.value() == 1 and center_left_IR.value() == 0 and center_right_IR.value() == 0:
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
 
         # RIGHT deviation: pivot right
-        elif right_IR.value() == 1 and left_IR.value() == 0 and middle_IR.value() == 0:
+        elif (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 0) or (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 1):
             motor_left.set_forwards()
             motor_right.set_backwards()
             motor_left.duty(outsidewheel)
@@ -95,20 +97,20 @@ def follow_line():
             time.sleep(0.02)
 
         # LEFT deviation: pivot left
-        elif left_IR.value() == 1 and right_IR.value() == 0 and middle_IR.value() == 0: 
+        elif (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 0) or (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 1): 
             motor_left.set_backwards()
             motor_right.set_forwards()
             motor_left.duty(insidewheel)
             motor_right.duty(outsidewheel)
             time.sleep(0.02)
-        
-        elif left_IR.value() == 0 and right_IR.value() == 0 and middle_IR.value() == 0:
-            motor_left.set_forwards()
-            motor_right.set_forwards()
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-
+            
+        #Y-intersection, roundabout, no line
         else:
+            stop()
+            break
+        
+        #stubs/intersections
+        if outer_left_IR.value() == 1 or outer_right_IR.value() == 1:
             stop()
             break
         
@@ -126,11 +128,11 @@ def handle_stub(side):
     drive_forward()
     time.sleep(0.1) #actual time req UNKNOWN NEED TO TEST!
     stop()
-    if middle_IR_active == 1 and left_IR_active == 0 and right_IR_active == 0:
+    if middle_IR.value() == 1 and center_left_IR.value() == 0 and center_right_IR.value() == 0:
         print("Stub cleared")
         return
         # main loop takes over
-    elif middle_IR_active == 0 and left_IR_active == 0 and right_IR_active == 0:
+    elif middle_IR.value() == 0 and center_left_IR.value() == 0 and center_right_IR.value() == 0:
         print("Most likely 90 degree turn.")
     else:
         stop()
@@ -159,7 +161,7 @@ def detect_y_intersection(side):
                 print("ERROR: Y-intersection LEFT pivot timed out")
                 stop()
                 return
-            if middle_IR_active == 1 and right_IR_active == 0:
+            if middle_IR.value() == 1 and center_right_IR.value() == 0:
                 break
             time.sleep(0.01)
 
@@ -177,7 +179,7 @@ def detect_y_intersection(side):
                 print("ERROR: Y-intersection RIGHT pivot timed out")
                 stop()
                 return
-            if middle_IR_active == 1 and left_IR_active == 0:
+            if middle_IR.value() == 1 and center_left_IR.value() == 0:
                 break
             time.sleep(0.01)
 
@@ -253,18 +255,18 @@ def stop():
 # Detection
 def process_sensors():
     stop()
-    if left_IR.value() == 0 and right_IR.value() == 0 and middle_IR.value() == 1: # Go straight
-        follow_line()
-    elif left_IR.value() == 1 and right_IR.value() == 1 and middle_IR.value() == 1: #handle roundabout
+    if center_left_IR.value() == 1 and center_right_IR.value() == 1 and middle_IR.value() == 1: #handle roundabout
         roundabout()
-    elif left_IR.value() == 1 and right_IR.value() == 1 and middle_IR.value() == 0: # This logic for detecting y intersections needs to be fixed (I don't think it works due to speed of motors being too high and either skipping or following random path instead of specified path due to this logic not even being triggered)
+    elif (center_left_IR.value() == 1 and center_right_IR.value() == 1 and middle_IR.value() == 0) or (outer_left_IR.value() == 1 and outer_right_IR.value() == 1 and middle_IR.value() == 0): # This logic for detecting y intersections needs to be fixed (I don't think it works due to speed of motors being too high and either skipping or following random path instead of specified path due to this logic not even being triggered)
         detect_y_intersection("LEFT")  # change to "RIGHT" to take the other branch
-    elif left_IR.value() == 1 and right_IR.value() == 0 and middle_IR.value() == 1:
+    elif outer_left_IR.value() == 1 and outer_right_IR.value() == 0 and middle_IR.value() == 1:
         handle_stub("LEFT")
-    elif right_IR.value() == 1 and left_IR.value() == 0 and middle_IR.value() == 1:
+    elif outer_right_IR.value() == 1 and outer_left_IR.value() == 0 and middle_IR.value() == 1:
         handle_stub("RIGHT")
-    elif left_IR.value() == 0 and right_IR.value() == 0 and middle_IR.value() == 0:
+    elif outer_left_IR.value() == 0 and outer_right_IR.value() == 0 and center_left_IR.value() == 0 and center_right_IR.value() == 0 and middle_IR.value() == 0:
         no_line()
+    elif (center_left_IR.value() == 0 and center_right_IR.value() == 0 and middle_IR.value() == 1) or (center_left_IR.value() == 0 and middle_IR.value() == 0 and center_right_IR.value() == 1) or (center_left_IR.value() == 0 and middle_IR.value() == 1 and center_right_IR.value() == 1) or (center_left_IR.value() == 1 and middle_IR.value() == 0 and center_right_IR.value() == 0) or (center_left_IR.value() == 1 and middle_IR.value() == 1 and center_right_IR.value() == 0): # Go straight
+        follow_line()
     else:
         print("ERROR: Unknown senario.")
         follow_line()
@@ -315,52 +317,6 @@ def turn_vehicle(direction):
             time.sleep(offtime)
     else:
         pass
-
-def follow_line_roundabout(direction):
-    print("follow line running")
-    while not check_collision():
-        # Centred: go straight 
-        if middle_IR.value() == 1 and left_IR.value() == 0 and right_IR.value() == 0:
-            motor_left.set_forwards()
-            motor_right.set_forwards()
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-
-        # RIGHT deviation: pivot right
-        elif right_IR.value() == 1 and left_IR.value() == 0 and middle_IR.value() == 0:
-            motor_left.set_forwards()
-            motor_right.set_backwards()
-            motor_right.duty(0)
-            for i in range(12):
-                motor_left.duty(outsidewheel)
-                time.sleep(0.02)
-                motor_left.duty(0)
-                time.sleep(0.03)
-
-        # LEFT deviation: pivot left
-        elif left_IR.value() == 1 and right_IR.value() == 0 and middle_IR.value() == 0:
-            motor_left.set_backwards()
-            motor_right.set_forwards()
-            motor_left.duty(0)
-            for i in range(12):
-                motor_right.duty(outsidewheel)
-                time.sleep(0.02)
-                motor_right.duty(0)
-                time.sleep(0.03)
-        
-        elif left_IR.value() == 0 and right_IR.value() == 0 and middle_IR.value() == 0:
-            motor_left.set_forwards()
-            motor_right.set_forwards()
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-
-        else:
-            stop()
-            break
-        
-        time.sleep(ontime)
-        stop()
-        time.sleep(offtime)
     
 def turn_in_roundabout(direction):
     motor_left.set_forwards()
@@ -405,6 +361,9 @@ def turn_out_roundabout(direction):
         motor_left.duty(0)
         time.sleep(0.02)
         
+    turn_on_path(direction)
+
+def turn_on_path(direction):
     if direction == 1: #right
         motor_right.set_backwards()
         while not middle_IR.value():
@@ -434,25 +393,29 @@ def roundabout():
     stop()
     direction = select_direction()
     turn_in_roundabout(direction)
+    path = direction #in which direction the vehicle drives
     
     while True:
-        follow_line_roundabout(direction)
-        if ((right_IR.value() == 1) or (left_IR.value() == 1)):
+        follow_line()
+        if ((outer_right_IR.value() == 1) or (outer_left_IR.value() == 1) or (center_right_IR.value() == 1 and center_left_IR.value() == 1 and middle_IR.value() == 1)):
             if (middle_IR.value() == 1): #helpful?????
                 direction = select_direction()
                 if ((direction == 1) or (direction == 0)): #1:right, 0:left
                     turn_out_roundabout(direction)
                     break
                 else:
-                    pass
-                    #hier weiter mit ausfahrt skippen
+                    skip_distraction_line()
+                    if (path == 1):
+                        turn_on_path(0)
+                    else:
+                        turn_on_path(1)
             else:
                 #faulthandling
                 pass
 
 def select_direction():
     #0 = left, 1 = right, 2 = straight
-    richtungen = [1, 2, 1]
+    richtungen = [1, 1, 2, 1]#for every intersection in roundabout one direction
     global direction_counter
     
     if direction_counter < len(richtungen):
