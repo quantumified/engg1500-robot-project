@@ -6,13 +6,13 @@ from ultrasonic import sonic
 import ssd1306
 
 # Setup sensors and motors
-middle_IR       = Pin(21, Pin.IN)
+middle_IR = Pin(21, Pin.IN)
 center_right_IR = Pin(22, Pin.IN)
-center_left_IR  = Pin(20, Pin.IN)
-outer_right_IR  = Pin(18, Pin.IN)
-outer_left_IR   = Pin(19, Pin.IN)
+center_left_IR = Pin(20, Pin.IN)
+outer_right_IR = Pin(18, Pin.IN)
+outer_left_IR = Pin(19, Pin.IN)
 
-motor_left  = Motor("Left", 11, 10, 7)
+motor_left = Motor("Left", 11, 10, 7)
 motor_right = Motor("Right", 9, 8, 6)
 
 ultrasonic_front = sonic(3, 2)
