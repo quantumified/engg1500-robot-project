@@ -83,13 +83,24 @@ def follow_line():
     oled.text("follow line", 0, 40)
     oled.show()
     print("follow line running")
+
+    MAX_ITERATIONS = 200  # Tune this to your loop timing
+    iteration = 0
+
     while not check_collision():
+        if iteration >= MAX_ITERATIONS:
+            print("follow_line timeout — handing back to process_sensors")
+            stop()
+            break
+        iteration += 1
+        
         mid = middle_IR.value()
         cr  = center_right_IR.value()
         cl  = center_left_IR.value()
         or_ = outer_right_IR.value()
         ol  = outer_left_IR.value()
 
+        
         # Centred: go straight
         if mid == 1 and cl == 0 and cr == 0 and ol == 0 and or_ == 0:
             motor_left.set_forwards()
