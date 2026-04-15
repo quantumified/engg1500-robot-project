@@ -15,9 +15,9 @@ outer_left_IR = Pin(19, Pin.IN)
 motor_left = Motor("Left", 11, 10, 7)
 motor_right = Motor("Right", 9, 8, 6)
 
-ultrasonic_front = sonic(3, 2)
+ultrasonic_front = sonic(14, 15)
 ultrasonic_left  = sonic(5, 4)
-ultrasonic_right = sonic(17, 16)
+ultrasonic_right = sonic(12, 13)
 
 # globals
 direction_counter = 0
@@ -69,23 +69,19 @@ def print_oled():
 # CORE
 
 def check_collision():
-    print_oled()
-    oled.text("collision", 0, 40)
-    oled.show()
-
     front_mm = ultrasonic_front.distance_mm()
     if front_mm < 0:
-        print("ERROR: ultrasonic")
+        print("ERROR: ultrasonic (negative value, continuing)")
         return False
     elif front_mm < collisiondist:
         stop()
+        print_oled()
+        oled.text("collision", 0, 40)
+        oled.show()
         return True
     return False
 
 def stop():
-    print_oled()
-    oled.text("stop", 0, 40)
-    oled.show()
     motor_left.duty(0)
     motor_right.duty(0)
 
