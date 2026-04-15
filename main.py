@@ -84,39 +84,69 @@ def follow_line():
     oled.show()
     print("follow line running")
     while not check_collision():
-        # Centred: go straight 
-        if middle_IR.value() == 1 and center_left_IR.value() == 0 and center_right_IR.value() == 0:
+        mid = middle_IR.value()
+        cr  = center_right_IR.value()
+        cl  = center_left_IR.value()
+        or_ = outer_right_IR.value()
+        ol  = outer_left_IR.value()
+
+        # Centred: go straight
+        if mid == 1 and cl == 0 and cr == 0 and ol == 0 and or_ == 0:
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
 
-        # RIGHT deviation: pivot right
-        elif (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 0) or (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 1):
+        # Minor RIGHT deviation: center_right sees line, pivot right gently
+        elif (cr == 1 and cl == 0 and mid == 0 and or_ == 0 and ol == 0) or \
+             (cr == 1 and cl == 0 and mid == 1 and or_ == 0 and ol == 0):
             motor_left.set_forwards()
             motor_right.set_backwards()
             motor_left.duty(outsidewheel)
             motor_right.duty(insidewheel)
             time.sleep(ontime)
 
-        # LEFT deviation: pivot left
-        elif (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 0) or (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 1): 
+        # Minor LEFT deviation: center_left sees line, pivot left gently
+        elif (cl == 1 and cr == 0 and mid == 0 and or_ == 0 and ol == 0) or \
+             (cl == 1 and cr == 0 and mid == 1 and or_ == 0 and ol == 0):
             motor_left.set_backwards()
             motor_right.set_forwards()
             motor_left.duty(insidewheel)
             motor_right.duty(outsidewheel)
             time.sleep(ontime)
-            
-        # Y-intersection, roundabout, or no line — exit and let process_sensors handle it
+
+        # Big RIGHT deviation: outer_right sees line, sharp pivot right
+        elif (or_ == 1 and ol == 0 and cr == 0 and cl == 0 and mid == 0) or \
+             (or_ == 1 and ol == 0 and cr == 1 and cl == 0 and mid == 0) or \
+             (or_ == 1 and ol == 0 and cr == 1 and cl == 0 and mid == 1) or \
+             (or_ == 1 and ol == 0 and cr == 0 and cl == 0 and mid == 1):
+            motor_left.set_forwards()
+            motor_right.set_backwards()
+            motor_left.duty(fast)
+            motor_right.duty(fast)
+            time.sleep(ontime)
+
+        # Big LEFT deviation: outer_left sees line, sharp pivot left
+        elif (ol == 1 and or_ == 0 and cl == 0 and cr == 0 and mid == 0) or \
+             (ol == 1 and or_ == 0 and cl == 1 and cr == 0 and mid == 0) or \
+             (ol == 1 and or_ == 0 and cl == 1 and cr == 0 and mid == 1) or \
+             (ol == 1 and or_ == 0 and cl == 0 and cr == 0 and mid == 1):
+            motor_left.set_backwards()
+            motor_right.set_forwards()
+            motor_left.duty(fast)
+            motor_right.duty(fast)
+            time.sleep(ontime)
+
+        # Y-intersection, roundabout, or no line, exit and let process_sensors handle it
         else:
             stop()
             break
-        
-        # Stubs/intersections — exit and let process_sensors handle it
-        if outer_left_IR.value() == 1 or outer_right_IR.value() == 1:
+
+        # Stubs/intersections: exit and let process_sensors handle it
+        if ol == 1 and or_ == 1:
             stop()
             break
-        
+
         time.sleep(ontime)
         stop()
         time.sleep(offtime)
