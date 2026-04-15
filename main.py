@@ -217,13 +217,13 @@ def no_line():
             motor_left.duty(slow)
             motor_right.duty(slow)
         elif ratio < (1 - centretollerance):
-            motor_left.set_backwards()
-            motor_right.set_forwards()
+            motor_right.set_backwards()
+            motor_left.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
         elif ratio > (1 + centretollerance):
-            motor_left.set_forwards()
-            motor_right.set_backwards()
+            motor_right.set_forwards()
+            motor_left.set_backwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
 
