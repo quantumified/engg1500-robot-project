@@ -261,7 +261,6 @@ def no_line():
         stop()
         time.sleep(offtime)
 
-        # FIX: replaced undefined left_IR/right_IR with correct sensor variables
         if middle_IR.value() == 1 or outer_left_IR.value() == 1 or outer_right_IR.value() == 1:
             print("Line reacquired")
             return
@@ -300,6 +299,9 @@ def process_sensors():
         follow_line()
     else:
         print("ERROR: Unknown scenario.")
+        print_oled()
+        oled.text("UNKNOW: Defaulting", 0, 40)
+        oled.show()
         follow_line()
     time.sleep(ontime)
 
@@ -475,8 +477,14 @@ def skip_distraction_line():
 motor_left.set_forwards()
 motor_right.set_forwards()
 print("Starting in 2 seconds...")
+print_oled()
+oled.text("Starting in 2 seconds...", 0, 40)
+oled.show()
 #time.sleep(2)
 print("Running")
+print_oled()
+oled.text("Running", 0, 40)
+oled.show()
 drive_forward()
 
 # Main loop
