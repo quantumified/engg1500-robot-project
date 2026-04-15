@@ -59,8 +59,8 @@ def print_oled():
 # Check front ultrasonic only — false if clear
 def check_collision():
     print_oled()
-    oled.text("check collision", 0, 40)
-    oled.show()
+    # oled.text("check collision", 0, 40)
+    # oled.show()
     front_mm = ultrasonic_front.distance_mm()
     if front_mm < 0: # error
         print("ERROR: negative ultrasonic dist, continuing")
