@@ -58,7 +58,7 @@ def print_oled():
 
 # Check front ultrasonic only — false if clear
 def check_collision():
-    print_oled()
+    # print_oled()
     # oled.text("check collision", 0, 40)
     # oled.show()
     front_mm = ultrasonic_front.distance_mm()
