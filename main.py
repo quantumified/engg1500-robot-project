@@ -25,7 +25,7 @@ slow = 40
 outsidewheel = 45
 insidewheel = 35
 collisiondist = 50 # mm 
-centretollerance = 0.2 # tolerance for left/right ratio for no_line
+centretollerance = 0.4 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.02
 offtime = 0.01
@@ -237,9 +237,9 @@ def no_line():
             return
     
 def stop():
-    print_oled()
-    oled.text("stop", 0, 40)
-    oled.show()
+   # print_oled()
+   # oled.text("stop", 0, 40)
+   # oled.show()
     motor_left.duty(0)
     motor_right.duty(0)
     
