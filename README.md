@@ -2,4 +2,4 @@
 
 Uses MicroPython. Need to place uf2 file on a Pi Pico, then restart the Pico, plug it back in then can use Thonny or similar from there. 
 
-Encoder is only used for calibration of motors (not really necessary as typically only off by small amount other random stuff causes way more issues than this, can remove encoder entirely)
+Encoder is only used for calibration of motors (not really necessary as typically only off by small amount other random stuff causes way more issues than this, can remove encoder entirely). This is also motor dependant (big 24V? motors were used, way too much for this project honestly)
