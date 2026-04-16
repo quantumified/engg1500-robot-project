@@ -84,7 +84,6 @@ def follow_line():
             print_oled()
             oled.text("Follow line: Straight", 0, 40)
             oled.show()
-            time.sleep(ontime)
 
         # RIGHT deviation: pivot right
         elif (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 0) or (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 1) or (outer_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 0):
@@ -96,7 +95,6 @@ def follow_line():
             print_oled()
             oled.text("Follow line: Right", 0, 40)
             oled.show()
-            time.sleep(ontime)
 
         # LEFT deviation: pivot left
         elif (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 0) or (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 1) or (outer_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 0): 
@@ -108,7 +106,6 @@ def follow_line():
             print_oled()
             oled.text("Follow line: Left", 0, 40)
             oled.show()
-            time.sleep(ontime)
             
         # Y-intersection, roundabout, or no line: exit and let process_sensors handle it
         else:
@@ -116,7 +113,7 @@ def follow_line():
             break
         
         # Stubs/intersections: exit and let process_sensors handle it
-        if (outer_left_IR.value() == 1 and middle_IR == 1) or (outer_right_IR.value() == 1 and middle_IR == 1):
+        if (outer_left_IR.value() == 1 and middle_IR.value() == 1) or (outer_right_IR.value() == 1 and middle_IR.value() == 1):
             stop()
             break
         
