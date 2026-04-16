@@ -73,9 +73,23 @@ def follow_line():
     oled.text("Follow line", 0, 40)
     oled.show()
     print("Follow line running")
+
     while not check_collision():
+        # --- FIX 5: Read sensors once ---
+        mid = middle_IR.value()
+        cl = center_left_IR.value()
+        cr = center_right_IR.value()
+        ol = outer_left_IR.value()
+        or_ = outer_right_IR.value()
+
+        # Stubs/intersections: exit and let process_sensors handle it
+        # --- FIX 6: moved before movement logic ---
+        if (ol == 1 and mid == 1) or (or_ == 1 and mid == 1):
+            stop()
+            break
+
         # Centred: go straight 
-        if middle_IR.value() == 1 and center_left_IR.value() == 0 and center_right_IR.value() == 0:
+        if mid == 1 and cl == 0 and cr == 0:
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(slow)
@@ -86,7 +100,7 @@ def follow_line():
             oled.show()
 
         # RIGHT deviation: pivot right
-        elif (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 0) or (center_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 1) or (outer_right_IR.value() == 1 and center_left_IR.value() == 0 and middle_IR.value() == 0):
+        elif (cr == 1 and cl == 0 and mid == 0) or (cr == 1 and cl == 0 and mid == 1) or (or_ == 1 and cl == 0 and mid == 0):
             motor_left.set_forwards()
             motor_right.set_backwards()
             motor_left.duty(outsidewheel)
@@ -97,7 +111,7 @@ def follow_line():
             oled.show()
 
         # LEFT deviation: pivot left
-        elif (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 0) or (center_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 1) or (outer_left_IR.value() == 1 and center_right_IR.value() == 0 and middle_IR.value() == 0): 
+        elif (cl == 1 and cr == 0 and mid == 0) or (cl == 1 and cr == 0 and mid == 1) or (ol == 1 and cr == 0 and mid == 0): 
             motor_left.set_backwards()  # POTENTIAL NECESSARY FIX: REMOVE THE ONE WHERE MID = 1 AND CENTRE_SIDE = 1 (req testing)
             motor_right.set_forwards()
             motor_left.duty(insidewheel)
@@ -109,11 +123,6 @@ def follow_line():
             
         # Y-intersection, roundabout, or no line: exit and let process_sensors handle it
         else:
-            stop()
-            break
-        
-        # Stubs/intersections: exit and let process_sensors handle it
-        if (outer_left_IR.value() == 1 and middle_IR.value() == 1) or (outer_right_IR.value() == 1 and middle_IR.value() == 1):
             stop()
             break
         
