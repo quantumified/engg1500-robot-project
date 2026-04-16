@@ -84,22 +84,13 @@ def follow_line():
     oled.show()
     print("follow line running")
 
-    MAX_ITERATIONS = 200  # Tune this to your loop timing
-    iteration = 0
-
     while not check_collision():
-        if iteration >= MAX_ITERATIONS:
-            print("follow_line timeout — handing back to process_sensors")
-            stop()
-            break
-        iteration += 1
-        
+                
         mid = middle_IR.value()
         cr  = center_right_IR.value()
         cl  = center_left_IR.value()
         or_ = outer_right_IR.value()
         ol  = outer_left_IR.value()
-
         
         # Centred: go straight
         if mid == 1 and cl == 0 and cr == 0 and ol == 0 and or_ == 0:
@@ -128,24 +119,20 @@ def follow_line():
 
         # Big RIGHT deviation: outer_right sees line, sharp pivot right
         elif (or_ == 1 and ol == 0 and cr == 0 and cl == 0 and mid == 0) or \
-             (or_ == 1 and ol == 0 and cr == 1 and cl == 0 and mid == 0) or \
-             (or_ == 1 and ol == 0 and cr == 1 and cl == 0 and mid == 1) or \
-             (or_ == 1 and ol == 0 and cr == 0 and cl == 0 and mid == 1):
+             (or_ == 1 and ol == 0 and cr == 1 and cl == 0 and mid == 0):
             motor_left.set_forwards()
             motor_right.set_backwards()
-            motor_left.duty(fast)
-            motor_right.duty(fast)
+            motor_left.duty(outsidewheel)
+            motor_right.duty(insidewheel)
             time.sleep(ontime)
 
-        # Big LEFT deviation: outer_left sees line, sharp pivot left
+        # LEFT deviation: outer_left sees line, sharp left
         elif (ol == 1 and or_ == 0 and cl == 0 and cr == 0 and mid == 0) or \
-             (ol == 1 and or_ == 0 and cl == 1 and cr == 0 and mid == 0) or \
-             (ol == 1 and or_ == 0 and cl == 1 and cr == 0 and mid == 1) or \
-             (ol == 1 and or_ == 0 and cl == 0 and cr == 0 and mid == 1):
+             (ol == 1 and or_ == 0 and cl == 1 and cr == 0 and mid == 0):
             motor_left.set_backwards()
             motor_right.set_forwards()
-            motor_left.duty(fast)
-            motor_right.duty(fast)
+            motor_left.duty(insidewheel)
+            motor_right.duty(outsidewheel)
             time.sleep(ontime)
 
         # Y-intersection, roundabout, or no line, exit and let process_sensors handle it
