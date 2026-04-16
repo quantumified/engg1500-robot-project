@@ -120,7 +120,30 @@ def follow_line():
             print_oled()
             oled.text("Follow line: Left", 0, 40)
             oled.show()
-            
+
+        # RECOVERY: only outer sensor sees line → steer back
+        elif (ol == 1 and cl == 0 and cr == 0 and mid == 0) or (or_ == 1 and cl == 0 and cr == 0 and mid == 0):
+            if ol == 1:
+                motor_left.set_backwards()
+                motor_right.set_forwards()
+                motor_left.duty(insidewheel)
+                motor_right.duty(outsidewheel)
+                
+                # OLED Notif
+                print_oled()
+                oled.text("Recover: Left", 0, 40)
+                oled.show()
+
+            elif or_ == 1:
+                motor_left.set_forwards()
+                motor_right.set_backwards()
+                motor_left.duty(outsidewheel)
+                motor_right.duty(insidewheel)
+                
+                # OLED Notif
+                print_oled()
+                oled.text("Recover: Right", 0, 40)
+                oled.show()
         # Y-intersection, roundabout, or no line: exit and let process_sensors handle it
         else:
             stop()
