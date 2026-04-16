@@ -75,15 +75,13 @@ def follow_line():
     print("Follow line running")
 
     while not check_collision():
-        # --- FIX 5: Read sensors once ---
         mid = middle_IR.value()
         cl = center_left_IR.value()
         cr = center_right_IR.value()
         ol = outer_left_IR.value()
         or_ = outer_right_IR.value()
 
-        # Stubs/intersections: exit and let process_sensors handle it
-        # --- FIX 6: moved before movement logic ---
+        # Exit and let process_sensors handle it
         if (ol == 1 and mid == 1) or (or_ == 1 and mid == 1):
             stop()
             break
@@ -144,7 +142,7 @@ def follow_line():
                 print_oled()
                 oled.text("Recover: Right", 0, 40)
                 oled.show()
-        # Y-intersection, roundabout, or no line: exit and let process_sensors handle it
+        # Other situation: exit and let process_sensors handle it
         else:
             stop()
             break
