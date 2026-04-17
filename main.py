@@ -18,10 +18,10 @@ ultrasonic_left  = sonic(3, 2)
 ultrasonic_right = sonic(12, 13)  
 
 # Global counters
-direction_counter = 0 # (How many roundabouts it has been through counter)
+direction_counter = 0 # How many roundabouts it has been through
 
 # Setup important constants
-slow = 42
+slow = 41
 outsidewheel = 45
 insidewheel = 35
 collisiondist = 50 # mm 
@@ -68,7 +68,7 @@ def drive_forward():
     motor_left.duty(slow)
     motor_right.duty(slow)
 
-def follow_line():
+def follow_line(): # Now can recover if only outside sensor sees line
     print_oled()
     oled.text("Follow line", 0, 40)
     oled.show()
@@ -98,7 +98,7 @@ def follow_line():
             oled.show()
 
         # RIGHT deviation: pivot right
-        elif (cr == 1 and cl == 0 and mid == 0) or (cr == 1 and cl == 0 and mid == 1) or (or_ == 1 and cl == 0 and mid == 0):
+        elif (cr == 1 and cl == 0 and mid == 0) or (or_ == 1 and cl == 0 and mid == 0):
             motor_left.set_forwards()
             motor_right.set_backwards()
             motor_left.duty(outsidewheel)
@@ -109,8 +109,8 @@ def follow_line():
             oled.show()
 
         # LEFT deviation: pivot left
-        elif (cl == 1 and cr == 0 and mid == 0) or (cl == 1 and cr == 0 and mid == 1) or (ol == 1 and cr == 0 and mid == 0): 
-            motor_left.set_backwards()  # POTENTIAL NECESSARY FIX: REMOVE THE ONE WHERE MID = 1 AND CENTRE_SIDE = 1 (req testing)
+        elif (cl == 1 and cr == 0 and mid == 0) or (ol == 1 and cr == 0 and mid == 0): 
+            motor_left.set_backwards()  # POTENTIAL NECESSARY FIX: REMOVE THE ONE WHERE MID = 1 AND CENTRE_SIDE = 1 (removed for now)
             motor_right.set_forwards()
             motor_left.duty(insidewheel)
             motor_right.duty(outsidewheel)
@@ -120,13 +120,12 @@ def follow_line():
             oled.show()
 
         # RECOVERY: only outer sensor sees line → steer back
-        elif (ol == 1 and cl == 0 and cr == 0 and mid == 0) or (or_ == 1 and cl == 0 and cr == 0 and mid == 0):
+        elif (ol == 1 and cl == 0 and cr == 0 and mid == 0 and or_ == 0) or (or_ == 1 and cl == 0 and cr == 0 and mid == 0 and ol == 0):
             if ol == 1:
                 motor_left.set_backwards()
                 motor_right.set_forwards()
                 motor_left.duty(insidewheel)
                 motor_right.duty(outsidewheel)
-                
                 # OLED Notif
                 print_oled()
                 oled.text("Recover: Left", 0, 40)
@@ -137,12 +136,11 @@ def follow_line():
                 motor_right.set_backwards()
                 motor_left.duty(outsidewheel)
                 motor_right.duty(insidewheel)
-                
                 # OLED Notif
                 print_oled()
                 oled.text("Recover: Right", 0, 40)
                 oled.show()
-        # Other situation: exit and let process_sensors handle it
+        # Other situations: exit and let process_sensors handle it
         else:
             stop()
             break
@@ -171,7 +169,7 @@ def handle_stub(side):
         print("ERROR: stub error, stopped.")
         return
 
-def detect_y_intersection(side):
+def detect_y_intersection(side): # Essentially useless since never triggered as follow line will just cause it to take a random exit
     print_oled()
     oled.text("y intersection", 0, 40)
     oled.show()
@@ -212,7 +210,6 @@ def detect_y_intersection(side):
             if middle_IR.value() == 1 and center_left_IR.value() == 0:
                 break
             time.sleep(ontime)
-
     else:
         print(f"ERROR: detect_y_intersection: {side}, stopping.")
         stop()
@@ -226,7 +223,7 @@ def detect_y_intersection(side):
 
 def no_line():
     print_oled()
-    oled.text("no line", 0, 40)
+    oled.text("No line", 0, 40)
     oled.show()
     print("No line: ultrasonic sensing")
 
@@ -246,23 +243,49 @@ def no_line():
             motor_right.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
-        elif ratio < (1 - centretollerance):
+        elif ratio < (1 - centretollerance): # Now actually moves in direction req to recover instead of just pivoting on spot and risking just tweaking out in a circle
             motor_right.set_backwards()
             motor_left.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
+            # OLED Notif
+            print_oled()
+            oled.text("No line: Adjust", 0, 40)
+            oled.show()
+
+            time.sleep(ontime)
+            stop()
+            time.sleep(offtime)
+            # Move forwards in direction to recentre
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            
         elif ratio > (1 + centretollerance):
             motor_right.set_forwards()
             motor_left.set_backwards()
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            # OLED Notif
+            print_oled()
+            oled.text("No line: Adjust", 0, 40)
+            oled.show()
+            # Internal sleep to limit adjustment amount (need to test if this timeout is enough to prevent overshooting)
+            time.sleep(ontime)
+            stop()
+            time.sleep(offtime)
+            # Move forwards in direction to recentre
+            motor_left.set_forwards()
+            motor_right.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
 
         time.sleep(ontime)
         stop()
         time.sleep(offtime)
-
-        # FIX: replaced undefined left_IR/right_IR with correct sensor variables
-        if middle_IR.value() == 1 or outer_left_IR.value() == 1 or outer_right_IR.value() == 1:
+        # If any sensor sees line, exit and let process_sensors handle it.
+        if middle_IR.value() == 1 or outer_left_IR.value() == 1 or outer_right_IR.value() == 1 or center_left_IR.value() == 1 or center_right_IR.value() == 1:
             print("Line reacquired")
             return
     
@@ -290,6 +313,10 @@ def process_sensors():
         follow_line()
     else:
         print("ERROR: Unknown scenario.")
+        # OLED Notif
+        print_oled()
+        oled.text("Unknown: Defaulting", 0, 40)
+        oled.show()
         follow_line()
     time.sleep(ontime)
 
@@ -376,7 +403,7 @@ def turn_out_roundabout(direction):
     motor_right.set_forwards()
     for i in range(8):
         motor_left.duty(slow)
-        motor_right.duty(slow) #changed all roundabout motor duties to slow for consistency
+        motor_right.duty(slow) # Changed all roundabout motor duties to slow for consistency
         time.sleep(ontime)
         motor_right.duty(0)
         motor_left.duty(0)
@@ -385,7 +412,7 @@ def turn_out_roundabout(direction):
     turn_on_path(direction)
 
 def turn_on_path(direction):
-    if direction == 1: # right
+    if direction == 1: # Right
         motor_right.set_backwards()
         while not middle_IR.value():
             motor_left.duty(slow)
@@ -394,7 +421,7 @@ def turn_on_path(direction):
             motor_right.duty(0)
             motor_left.duty(0)
             time.sleep(offtime)
-    elif direction == 0: # left
+    elif direction == 0: # Left
         motor_left.set_backwards()
         while not middle_IR.value():
             motor_left.duty(slow)
@@ -423,9 +450,9 @@ def roundabout():
                 direction = select_direction()
                 if direction == 1 or direction == 0:
                     turn_out_roundabout(direction)
-                    break  # exit roundabout
+                    break  # Exit roundabout
                 else:
-                    # FIX: direction == 2 (straight) now breaks after skipping to prevent infinite loop when select_direction returns 2
+                    # Direction == 2 (straight) now breaks after skipping to prevent infinite loop when select_direction returns 2
                     skip_distraction_line()
                     if path == 1:
                         turn_on_path(0)
@@ -433,9 +460,9 @@ def roundabout():
                         turn_on_path(1)
                     break
             else:
-                # fault handling
+                # Error handling
                 print_oled()
-                oled.text("Roundabout: FAULT", 0, 40)
+                oled.text("Roundabout: ERROR", 0, 40)
                 oled.show()
                 pass
 
