@@ -98,7 +98,7 @@ def follow_line(): # Now can recover if only outside sensor sees line
             oled.show()
 
         # RIGHT deviation: pivot right
-        elif (cr == 1 and cl == 0 and mid == 0) or (or_ == 1 and cl == 0 and mid == 0):
+        elif (cr == 1 and cl == 0 and mid == 0) or (or_ == 1 and cl == 0 and mid == 0) or (cr == 1 and cl == 0 and mid == 1):
             motor_left.set_forwards()
             motor_right.set_backwards()
             motor_left.duty(outsidewheel)
@@ -109,8 +109,8 @@ def follow_line(): # Now can recover if only outside sensor sees line
             oled.show()
 
         # LEFT deviation: pivot left
-        elif (cl == 1 and cr == 0 and mid == 0) or (ol == 1 and cr == 0 and mid == 0): 
-            motor_left.set_backwards()  # POTENTIAL NECESSARY FIX: REMOVE THE ONE WHERE MID = 1 AND CENTRE_SIDE = 1 (removed for now)
+        elif (cl == 1 and cr == 0 and mid == 0) or (ol == 1 and cr == 0 and mid == 0) or (cl == 1 and cr == 0 and mid == 1): 
+            motor_left.set_backwards()  # POTENTIAL NECESSARY FIX: REMOVE THE ONE WHERE MID = 1 AND CENTRE_SIDE = 1
             motor_right.set_forwards()
             motor_left.duty(insidewheel)
             motor_right.duty(outsidewheel)
@@ -151,7 +151,7 @@ def follow_line(): # Now can recover if only outside sensor sees line
 
 def handle_stub(side):
     print_oled()
-    oled.text("handle stub", 0, 40)
+    oled.text(f"handle stub: {side}", 0, 40)
     oled.show()
     print(f"Stub detected ({side})")
     if check_collision():
@@ -164,6 +164,12 @@ def handle_stub(side):
         return
     elif middle_IR.value() == 0 and center_left_IR.value() == 0 and center_right_IR.value() == 0:
         print("Most likely 90 degree turn.")
+        motor_left.set_backwards() 
+        motor_right.set_forwards()
+        motor_left.duty(slow)
+        motor_right.duty(slow)
+        time.sleep(0.2)
+        stop()
     else:
         stop()
         print("ERROR: stub error, stopped.")
@@ -171,7 +177,7 @@ def handle_stub(side):
 
 def detect_y_intersection(side): # Essentially useless since never triggered as follow line will just cause it to take a random exit
     print_oled()
-    oled.text("y intersection", 0, 40)
+    oled.text(f"Y intersection: {side}", 0, 40)
     oled.show()
     stop()
     print(f"Y Intersection detected: taking {side} path.")
