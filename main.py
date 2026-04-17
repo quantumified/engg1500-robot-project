@@ -27,7 +27,7 @@ slow             = 41
 outsidewheel     = 45
 insidewheel      = 35
 collisiondist    = 50     # mm
-centretollerance = 0.4    # ratio band for no_line straight driving
+centretollerance = 0.3    # ratio band for no_line straight driving
 pivottimeout     = 3.0    # sec – max time for any sensor-guided pivot
 ontime           = 0.02   # motor-on pulse duration
 offtime          = 0.01   # motor-off pause duration
@@ -412,7 +412,7 @@ def no_line():
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(slow)
-            motor_right.duty(int(slow * 0.6))
+            motor_right.duty(0)
             time.sleep(ontime)
             stop()
             time.sleep(offtime)
@@ -421,7 +421,7 @@ def no_line():
         elif ratio > (1 + centretollerance):
             motor_left.set_forwards()
             motor_right.set_forwards()
-            motor_left.duty(int(slow * 0.6))
+            motor_left.duty(0)
             motor_right.duty(slow)
             time.sleep(ontime)
             stop()
