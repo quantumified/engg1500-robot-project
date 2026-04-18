@@ -68,15 +68,14 @@ def read_ir_snapshot(samples=ir_samples, delay_ms=ir_delay_ms):
     }
 
 def is_all_zero_snapshot(snapshot):
-    return (snapshot["mid"] == 0 and snapshot["cl"] == 0 and snapshot["cr"] == 0 and
-            snapshot["ol"] == 0 and snapshot["or"] == 0)
+    return all(value == 0 for value in snapshot.values())
 
 def log_snapshot(tag, snapshot, counters_text=""):
     global debug_tick
     debug_tick += 1
     if debug_tick % debug_snapshot_interval == 0:
-        extra = f" [{counters_text}]" if counters_text else ""
-        print(f"{tag}: mid={snapshot['mid']} cl={snapshot['cl']} cr={snapshot['cr']} ol={snapshot['ol']} or={snapshot['or']}{extra}")
+        debug_suffix = f" [{counters_text}]" if counters_text else ""
+        print(f"{tag}: mid={snapshot['mid']} cl={snapshot['cl']} cr={snapshot['cr']} ol={snapshot['ol']} or={snapshot['or']}{debug_suffix}")
 
 # ------------------------------------------------------------------
 # Initialise OLED
@@ -400,7 +399,11 @@ def no_line():
         if right_mm is None:
             right_mm = last_right_mm
 
-        if left_mm is None or right_mm is None or left_mm <= 0 or right_mm <= 0:
+        if left_mm is None or right_mm is None:
+            print("Ultrasonic filtered error, skipping cycle")
+            time.sleep(0.05)
+            continue
+        if left_mm <= 0 or right_mm <= 0:
             print("Ultrasonic filtered error, skipping cycle")
             time.sleep(0.05)
             continue
@@ -496,6 +499,7 @@ def process_sensors():
             pending_event_count = 1
         if pending_event_count < event_confirm_ticks:
             print(f"Pending event confirmation: {event} ({pending_event_count}/{event_confirm_ticks})")
+            # Keep line tracking active while waiting for one more matching snapshot.
             follow_line()
             time.sleep(ontime)
             return
