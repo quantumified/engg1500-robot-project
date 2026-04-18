@@ -29,11 +29,14 @@ centretollerance = 0.4 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.02
 offtime = 0.01
+# IR majority vote tuning: keep low latency for fast robot while still filtering jitter.
 ir_samples = 3
 ir_delay_ms = 0
 event_confirm_ticks = 2
 line_lost_confirm_ticks = 2
 debug_snapshot_interval = 12
+ultrasonic_filter_samples = 3
+ultrasonic_stagger_delay_ms = 2
 
 # Global event/debug state
 pending_event = None
@@ -362,11 +365,11 @@ def median_value(values):
 def read_ultrasonic_filtered_pair():
     left_samples = []
     right_samples = []
-    for _ in range(3):
+    for _ in range(ultrasonic_filter_samples):
         left_mm = ultrasonic_left.distance_mm()
-        time.sleep_ms(2)
+        time.sleep_ms(ultrasonic_stagger_delay_ms)
         right_mm = ultrasonic_right.distance_mm()
-        time.sleep_ms(2)
+        time.sleep_ms(ultrasonic_stagger_delay_ms)
         if left_mm > 0:
             left_samples.append(left_mm)
         if right_mm > 0:
