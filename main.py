@@ -98,6 +98,13 @@ def print_oled():
     oled.text("OR:" + str(outer_right_IR.value()), 45, 20)
     oled.show()
 
+def oled_update(status, debug=""):
+    """Write status at y=40 and optional debug line at y=52, then refresh display."""
+    oled.text(status[:16], 0, 40)
+    if debug:
+        oled.text(debug[:16], 0, 52)
+    oled.show()
+
 # ------------------------------------------------------------------
 # Collision Check
 # ------------------------------------------------------------------
@@ -110,8 +117,7 @@ def check_collision():
         print(f"Collision: {front_mm} mm room left")
         stop()
         print_oled()
-        oled.text(f"COLLISION: {front_mm}", 0, 40)
-        oled.show()
+        oled_update(f"COLLISION:{int(front_mm)}", "STOPPED")
         return True
     return False
 
@@ -133,12 +139,10 @@ def stop():
 # ------------------------------------------------------------------
 def follow_line():
     print_oled()
-    oled.text("Follow line", 0, 40)
-    oled.show()
+    oled_update("Follow line")
     print("Follow line running")
 
     zero_count = 0
-    intersection_count = 0
 
     while not check_collision():
         snapshot = read_ir_snapshot()
@@ -147,7 +151,7 @@ def follow_line():
         cr = snapshot["cr"]
         ol = snapshot["ol"]
         or_ = snapshot["or"]
-        log_snapshot("follow", snapshot, f"zero={zero_count} inter={intersection_count}")
+        log_snapshot("follow", snapshot, f"zero={zero_count}")
 
         # All zero -> line lost
         if is_all_zero_snapshot(snapshot):
@@ -184,16 +188,6 @@ def follow_line():
         else:
             zero_count = 0
 
-        # Complex intersections: require short confirmation before exit to process_sensors
-        if (ol == 1 and mid == 1) or (or_ == 1 and mid == 1):
-            intersection_count += 1
-        else:
-            intersection_count = 0
-
-        if intersection_count >= event_confirm_ticks:
-            stop()
-            break
-
         # Centered: straight
         if mid == 1 and cl == 0 and cr == 0:
             motor_left.set_forwards()
@@ -201,8 +195,7 @@ def follow_line():
             motor_left.duty(slow)
             motor_right.duty(slow)
             print_oled()
-            oled.text("Follow: Straight", 0, 40)
-            oled.show()
+            oled_update("Follow: Straight", f"{ol}{cl}{mid}{cr}{or_} z:{zero_count}")
 
         # Right deviation
         elif (cr == 1 and cl == 0 and mid == 0) or (or_ == 1 and cl == 0 and mid == 0) or (cr == 1 and cl == 0 and mid == 1):
@@ -211,8 +204,7 @@ def follow_line():
             motor_left.duty(outsidewheel)
             motor_right.duty(insidewheel)
             print_oled()
-            oled.text("Follow: Right", 0, 40)
-            oled.show()
+            oled_update("Follow: Right", f"{ol}{cl}{mid}{cr}{or_} z:{zero_count}")
 
         # Left deviation
         elif (cl == 1 and cr == 0 and mid == 0) or (ol == 1 and cr == 0 and mid == 0) or (cl == 1 and cr == 0 and mid == 1):
@@ -221,8 +213,7 @@ def follow_line():
             motor_left.duty(insidewheel)
             motor_right.duty(outsidewheel)
             print_oled()
-            oled.text("Follow: Left", 0, 40)
-            oled.show()
+            oled_update("Follow: Left", f"{ol}{cl}{mid}{cr}{or_} z:{zero_count}")
 
         # Recovery: only outer sensor sees line
         elif (ol == 1 and cl == 0 and cr == 0 and mid == 0 and or_ == 0) or (or_ == 1 and cl == 0 and cr == 0 and mid == 0 and ol == 0):
@@ -232,16 +223,14 @@ def follow_line():
                 motor_left.duty(insidewheel)
                 motor_right.duty(outsidewheel)
                 print_oled()
-                oled.text("Recover: Left", 0, 40)
-                oled.show()
+                oled_update("Recover: Left", f"{ol}{cl}{mid}{cr}{or_}")
             elif or_ == 1:
                 motor_left.set_forwards()
                 motor_right.set_backwards()
                 motor_left.duty(outsidewheel)
                 motor_right.duty(insidewheel)
                 print_oled()
-                oled.text("Recover: Right", 0, 40)
-                oled.show()
+                oled_update("Recover: Right", f"{ol}{cl}{mid}{cr}{or_}")
         else:
             # Unexpected pattern; exit and re-evaluate
             stop()
@@ -256,8 +245,7 @@ def follow_line():
 # ------------------------------------------------------------------
 def handle_stub(side):
     print_oled()
-    oled.text(f"handle stub: {side}", 0, 40)
-    oled.show()
+    oled_update(f"Stub: {side}")
     print(f"Stub detected ({side})")
     if check_collision():
         return
@@ -299,8 +287,7 @@ def handle_stub(side):
 # ------------------------------------------------------------------
 def detect_y_intersection(side):
     print_oled()
-    oled.text(f"Y intersection: {side}", 0, 40)
-    oled.show()
+    oled_update(f"Y-inter: {side}")
     stop()
     print(f"Y Intersection detected: taking {side} path.")
     time.sleep(0.1)
@@ -378,8 +365,7 @@ def read_ultrasonic_filtered_pair():
 
 def no_line():
     print_oled()
-    oled.text("No line", 0,40)
-    oled.show()
+    oled_update("No line: sonic")
     print("No line: ultrasonic sensing")
 
     start_time = time.time()
@@ -430,8 +416,7 @@ def no_line():
             motor_left.duty(slow)
             motor_right.duty(slow)
             print_oled()
-            oled.text("No line: Turn right", 0,40)
-            oled.show()
+            oled_update("NL: Turn right", f"r:{ratio:.2f}")
             time.sleep(0.05)
             stop()
             time.sleep(offtime)
@@ -446,8 +431,7 @@ def no_line():
             motor_left.duty(slow)
             motor_right.duty(slow)
             print_oled()
-            oled.text("No line: Turn left", 0,40)
-            oled.show()
+            oled_update("NL: Turn left", f"r:{ratio:.2f}")
             time.sleep(0.05)
             stop()
             time.sleep(offtime)
@@ -525,8 +509,7 @@ def process_sensors():
     else:
         print("ERROR: Unknown scenario, defaulting to follow_line")
         print_oled()
-        oled.text("Unknown: Defaulting", 0,40)
-        oled.show()
+        oled_update("Unknown: default", f"{ol}{cl}{mid}{cr}{or_}")
         follow_line()
     pending_event = None
     pending_event_count = 0
@@ -657,8 +640,7 @@ def turn_on_path(direction):
 def roundabout():
     global direction_counter
     print_oled()
-    oled.text("Roundabout", 0,40)
-    oled.show()
+    oled_update("Roundabout", f"cnt:{direction_counter}")
     print("Roundabout detected")
     stop()
     direction = select_direction()
@@ -700,8 +682,7 @@ def roundabout():
                     break
             else:
                 print_oled()
-                oled.text("Roundabout: Exit w/o mid", 0,40)
-                oled.show()
+                oled_update("RA: exit no mid", f"ol={snapshot['ol']} or={snapshot['or']}")
                 if snapshot["ol"] == 1:
                     exit_dir = 0
                 elif snapshot["or"] == 1:
