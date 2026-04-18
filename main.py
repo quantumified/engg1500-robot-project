@@ -29,11 +29,24 @@ centretollerance = 0.4 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.02
 offtime = 0.01
+# IR majority vote tuning: keep low latency for fast robot while still filtering jitter.
+ir_samples = 3
+ir_delay_ms = 0
+event_confirm_ticks = 2
+line_lost_confirm_ticks = 2
+debug_snapshot_interval = 12
+ultrasonic_filter_samples = 3
+ultrasonic_stagger_delay_ms = 2
+
+# Global event/debug state
+pending_event = None
+pending_event_count = 0
+debug_tick = 0
 
 # ------------------------------------------------------------------
 # Enhanced Debounced Sensor Read with adjustable parameters
 # ------------------------------------------------------------------
-def read_ir_sensor(pin, samples=5, delay_ms=2):
+def read_ir_sensor(pin, samples=ir_samples, delay_ms=ir_delay_ms):
     """
     Read IR sensor with majority voting to reject noise.
     Increasing samples improves stability but adds small latency.
@@ -41,8 +54,31 @@ def read_ir_sensor(pin, samples=5, delay_ms=2):
     count = 0
     for _ in range(samples):
         count += pin.value()
-        time.sleep_ms(delay_ms)
+        if delay_ms > 0:
+            time.sleep_ms(delay_ms)
     return 1 if count > samples // 2 else 0
+
+def read_ir_snapshot(samples=ir_samples, delay_ms=ir_delay_ms):
+    """
+    Read all IR sensors once and return a consistent snapshot for this control tick.
+    """
+    return {
+        "mid": read_ir_sensor(middle_IR, samples=samples, delay_ms=delay_ms),
+        "cl": read_ir_sensor(center_left_IR, samples=samples, delay_ms=delay_ms),
+        "cr": read_ir_sensor(center_right_IR, samples=samples, delay_ms=delay_ms),
+        "ol": read_ir_sensor(outer_left_IR, samples=samples, delay_ms=delay_ms),
+        "or": read_ir_sensor(outer_right_IR, samples=samples, delay_ms=delay_ms),
+    }
+
+def is_all_zero_snapshot(snapshot):
+    return all(value == 0 for value in snapshot.values())
+
+def log_snapshot(tag, snapshot, counters_text=""):
+    global debug_tick
+    debug_tick += 1
+    if debug_tick % debug_snapshot_interval == 0:
+        debug_suffix = f" [{counters_text}]" if counters_text else ""
+        print(f"{tag}: mid={snapshot['mid']} cl={snapshot['cl']} cr={snapshot['cr']} ol={snapshot['ol']} or={snapshot['or']}{debug_suffix}")
 
 # ------------------------------------------------------------------
 # Initialise OLED
@@ -74,7 +110,8 @@ def check_collision():
         print(f"Collision: {front_mm} mm room left")
         stop()
         print_oled()
-        oled.text(f"COLLISION: {front_mm}", 0, 40)
+        oled.text(f"COLLISION:{int(front_mm)}", 0, 40)
+        oled.text("STOPPED", 0, 52)
         oled.show()
         return True
     return False
@@ -102,23 +139,20 @@ def follow_line():
     print("Follow line running")
 
     zero_count = 0
-    MAX_ZERO_BEFORE_RECOVERY = 3  # Try small wiggle before giving up entirely
 
     while not check_collision():
-        mid = read_ir_sensor(middle_IR)
-        cl  = read_ir_sensor(center_left_IR)
-        cr  = read_ir_sensor(center_right_IR)
-        ol  = read_ir_sensor(outer_left_IR)
-        or_ = read_ir_sensor(outer_right_IR)
-
-        # Log sensor states for debugging (every few loops to avoid spam)
-        if zero_count % 10 == 0:
-            print(f"IR: mid={mid} cl={cl} cr={cr} ol={ol} or={or_}")
+        snapshot = read_ir_snapshot()
+        mid = snapshot["mid"]
+        cl = snapshot["cl"]
+        cr = snapshot["cr"]
+        ol = snapshot["ol"]
+        or_ = snapshot["or"]
+        log_snapshot("follow", snapshot, f"zero={zero_count}")
 
         # All zero -> line lost
-        if mid == 0 and cl == 0 and cr == 0 and ol == 0 and or_ == 0:
+        if is_all_zero_snapshot(snapshot):
             zero_count += 1
-            if zero_count >= MAX_ZERO_BEFORE_RECOVERY:
+            if zero_count >= line_lost_confirm_ticks:
                 print("Line lost: attempting recovery wiggle")
                 # Attempt small left-right search before exiting
                 for _ in range(2):
@@ -137,20 +171,18 @@ def follow_line():
                     stop()
                     time.sleep(0.05)
                     # Check if line reacquired
-                    if read_ir_sensor(middle_IR) or read_ir_sensor(center_left_IR) or read_ir_sensor(center_right_IR):
+                    reacquire_snapshot = read_ir_snapshot()
+                    if (reacquire_snapshot["mid"] or reacquire_snapshot["cl"] or
+                        reacquire_snapshot["cr"] or reacquire_snapshot["ol"] or
+                        reacquire_snapshot["or"]):
                         zero_count = 0
                         break
-                if zero_count >= MAX_ZERO_BEFORE_RECOVERY:
+                if zero_count >= line_lost_confirm_ticks:
                     # Still lost, exit and let no_line handle it
                     stop()
                     break
         else:
             zero_count = 0
-
-        # Complex intersections: exit to process_sensors
-        if (ol == 1 and mid == 1) or (or_ == 1 and mid == 1):
-            stop()
-            break
 
         # Centered: straight
         if mid == 1 and cl == 0 and cr == 0:
@@ -160,6 +192,7 @@ def follow_line():
             motor_right.duty(slow)
             print_oled()
             oled.text("Follow: Straight", 0, 40)
+            oled.text(f"{ol}{cl}{mid}{cr}{or_} z:{zero_count}", 0, 52)
             oled.show()
 
         # Right deviation
@@ -170,6 +203,7 @@ def follow_line():
             motor_right.duty(insidewheel)
             print_oled()
             oled.text("Follow: Right", 0, 40)
+            oled.text(f"{ol}{cl}{mid}{cr}{or_} z:{zero_count}", 0, 52)
             oled.show()
 
         # Left deviation
@@ -180,6 +214,7 @@ def follow_line():
             motor_right.duty(outsidewheel)
             print_oled()
             oled.text("Follow: Left", 0, 40)
+            oled.text(f"{ol}{cl}{mid}{cr}{or_} z:{zero_count}", 0, 52)
             oled.show()
 
         # Recovery: only outer sensor sees line
@@ -191,6 +226,7 @@ def follow_line():
                 motor_right.duty(outsidewheel)
                 print_oled()
                 oled.text("Recover: Left", 0, 40)
+                oled.text(f"{ol}{cl}{mid}{cr}{or_}", 0, 52)
                 oled.show()
             elif or_ == 1:
                 motor_left.set_forwards()
@@ -199,6 +235,7 @@ def follow_line():
                 motor_right.duty(insidewheel)
                 print_oled()
                 oled.text("Recover: Right", 0, 40)
+                oled.text(f"{ol}{cl}{mid}{cr}{or_}", 0, 52)
                 oled.show()
         else:
             # Unexpected pattern; exit and re-evaluate
@@ -214,7 +251,7 @@ def follow_line():
 # ------------------------------------------------------------------
 def handle_stub(side):
     print_oled()
-    oled.text(f"handle stub: {side}", 0, 40)
+    oled.text(f"Stub: {side}", 0, 40)
     oled.show()
     print(f"Stub detected ({side})")
     if check_collision():
@@ -223,9 +260,10 @@ def handle_stub(side):
     time.sleep(0.1)
     stop()
 
-    mid = read_ir_sensor(middle_IR)
-    cl  = read_ir_sensor(center_left_IR)
-    cr  = read_ir_sensor(center_right_IR)
+    snapshot = read_ir_snapshot()
+    mid = snapshot["mid"]
+    cl = snapshot["cl"]
+    cr = snapshot["cr"]
 
     if mid == 1 and cl == 0 and cr == 0:
         print("Stub cleared")
@@ -256,7 +294,7 @@ def handle_stub(side):
 # ------------------------------------------------------------------
 def detect_y_intersection(side):
     print_oled()
-    oled.text(f"Y intersection: {side}", 0, 40)
+    oled.text(f"Y-inter: {side}", 0, 40)
     oled.show()
     stop()
     print(f"Y Intersection detected: taking {side} path.")
@@ -274,7 +312,8 @@ def detect_y_intersection(side):
                 print("ERROR: Y-intersection LEFT pivot timed out")
                 stop()
                 return
-            if read_ir_sensor(middle_IR) == 1 and read_ir_sensor(center_right_IR) == 0:
+            snapshot = read_ir_snapshot()
+            if snapshot["mid"] == 1 and snapshot["cr"] == 0:
                 break
             time.sleep(ontime)
 
@@ -290,7 +329,8 @@ def detect_y_intersection(side):
                 print("ERROR: Y-intersection RIGHT pivot timed out")
                 stop()
                 return
-            if read_ir_sensor(middle_IR) == 1 and read_ir_sensor(center_left_IR) == 0:
+            snapshot = read_ir_snapshot()
+            if snapshot["mid"] == 1 and snapshot["cl"] == 0:
                 break
             time.sleep(ontime)
     else:
@@ -307,14 +347,40 @@ def detect_y_intersection(side):
 # ------------------------------------------------------------------
 # no_line with timeout and corrected adjustment directions
 # ------------------------------------------------------------------
+def median_value(values):
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    length = len(sorted_values)
+    middle = length // 2
+    if length % 2 == 1:
+        return sorted_values[middle]
+    return (sorted_values[middle - 1] + sorted_values[middle]) / 2
+
+def read_ultrasonic_filtered_pair():
+    left_samples = []
+    right_samples = []
+    for _ in range(ultrasonic_filter_samples):
+        left_mm = ultrasonic_left.distance_mm()
+        time.sleep_ms(ultrasonic_stagger_delay_ms)
+        right_mm = ultrasonic_right.distance_mm()
+        time.sleep_ms(ultrasonic_stagger_delay_ms)
+        if left_mm > 0:
+            left_samples.append(left_mm)
+        if right_mm > 0:
+            right_samples.append(right_mm)
+    return median_value(left_samples), median_value(right_samples)
+
 def no_line():
     print_oled()
-    oled.text("No line", 0,40)
+    oled.text("No line: sonic", 0, 40)
     oled.show()
     print("No line: ultrasonic sensing")
 
     start_time = time.time()
     NO_LINE_TIMEOUT = 5.0
+    last_left_mm = None
+    last_right_mm = None
 
     while True:
         if check_collision():
@@ -324,16 +390,27 @@ def no_line():
             stop()
             return
 
-        left_mm = ultrasonic_left.distance_mm()
-        right_mm = ultrasonic_right.distance_mm()
+        left_mm, right_mm = read_ultrasonic_filtered_pair()
+
+        if left_mm is None:
+            left_mm = last_left_mm
+        if right_mm is None:
+            right_mm = last_right_mm
+
+        if left_mm is None or right_mm is None:
+            print("Ultrasonic filtered error, skipping cycle")
+            time.sleep(0.05)
+            continue
         if left_mm <= 0 or right_mm <= 0:
-            print("Ultrasonic error, skipping cycle")
+            print("Ultrasonic filtered error, skipping cycle")
             time.sleep(0.05)
             continue
 
-        if right_mm == 0:
-            right_mm = 1
+        last_left_mm = left_mm
+        last_right_mm = right_mm
         ratio = left_mm / right_mm
+        if debug_tick % debug_snapshot_interval == 0:
+            print(f"no_line ultrasonic: left={left_mm:.1f} right={right_mm:.1f} ratio={ratio:.2f}")
 
         # Center tolerance
         if (1 - centretollerance) <= ratio <= (1 + centretollerance):
@@ -348,7 +425,8 @@ def no_line():
             motor_left.duty(slow)
             motor_right.duty(slow)
             print_oled()
-            oled.text("No line: Turn right", 0,40)
+            oled.text("NL: Turn right", 0, 40)
+            oled.text(f"r:{ratio:.2f}", 0, 52)
             oled.show()
             time.sleep(0.05)
             stop()
@@ -364,7 +442,8 @@ def no_line():
             motor_left.duty(slow)
             motor_right.duty(slow)
             print_oled()
-            oled.text("No line: Turn left", 0,40)
+            oled.text("NL: Turn left", 0, 40)
+            oled.text(f"r:{ratio:.2f}", 0, 52)
             oled.show()
             time.sleep(0.05)
             stop()
@@ -379,9 +458,9 @@ def no_line():
         time.sleep(offtime)
 
         # Check if line reappeared
-        if (read_ir_sensor(middle_IR) or read_ir_sensor(outer_left_IR) or
-            read_ir_sensor(outer_right_IR) or read_ir_sensor(center_left_IR) or
-            read_ir_sensor(center_right_IR)):
+        line_snapshot = read_ir_snapshot()
+        if (line_snapshot["mid"] or line_snapshot["ol"] or line_snapshot["or"] or
+            line_snapshot["cl"] or line_snapshot["cr"]):
             print("Line reacquired")
             return
 
@@ -389,33 +468,66 @@ def no_line():
 # process_sensors with debounced reads
 # ------------------------------------------------------------------
 def process_sensors():
+    global pending_event, pending_event_count
     stop()
-    mid = read_ir_sensor(middle_IR)
-    cl  = read_ir_sensor(center_left_IR)
-    cr  = read_ir_sensor(center_right_IR)
-    ol  = read_ir_sensor(outer_left_IR)
-    or_ = read_ir_sensor(outer_right_IR)
+    snapshot = read_ir_snapshot()
+    mid = snapshot["mid"]
+    cl = snapshot["cl"]
+    cr = snapshot["cr"]
+    ol = snapshot["ol"]
+    or_ = snapshot["or"]
 
-    print(f"process_sensors: mid={mid} cl={cl} cr={cr} ol={ol} or={or_}")
+    log_snapshot("process", snapshot, f"event={pending_event} count={pending_event_count}")
 
+    event = None
     if cl == 1 and cr == 1 and mid == 1:
-        roundabout()
+        event = "roundabout"
     elif (cl == 1 and cr == 1 and mid == 0) or (ol == 1 and or_ == 1 and mid == 0):
-        detect_y_intersection("LEFT")  # Default left; modify as needed
+        event = "y_left"
     elif ol == 1 and or_ == 0 and mid == 1:
-        handle_stub("LEFT")
+        event = "stub_left"
     elif or_ == 1 and ol == 0 and mid == 1:
+        event = "stub_right"
+    elif is_all_zero_snapshot(snapshot):
+        event = "line_lost"
+
+    if event:
+        if event == pending_event:
+            pending_event_count += 1
+        else:
+            pending_event = event
+            pending_event_count = 1
+        if pending_event_count < event_confirm_ticks:
+            print(f"Pending event confirmation: {event} ({pending_event_count}/{event_confirm_ticks})")
+            # Keep line tracking active while waiting for one more matching snapshot.
+            follow_line()
+            time.sleep(ontime)
+            return
+    else:
+        pending_event = None
+        pending_event_count = 0
+
+    if event == "roundabout":
+        roundabout()
+    elif event == "y_left":
+        detect_y_intersection("LEFT")  # Default left; modify as needed
+    elif event == "stub_left":
+        handle_stub("LEFT")
+    elif event == "stub_right":
         handle_stub("RIGHT")
-    elif ol == 0 and or_ == 0 and cl == 0 and cr == 0 and mid == 0:
+    elif event == "line_lost":
         no_line()
     elif (cl == 0 and cr == 0 and mid == 1) or (cl == 0 and mid == 0 and cr == 1) or (cl == 1 and mid == 0 and cr == 0):
         follow_line()
     else:
         print("ERROR: Unknown scenario, defaulting to follow_line")
         print_oled()
-        oled.text("Unknown: Defaulting", 0,40)
+        oled.text("Unknown: default", 0, 40)
+        oled.text(f"{ol}{cl}{mid}{cr}{or_}", 0, 52)
         oled.show()
         follow_line()
+    pending_event = None
+    pending_event_count = 0
     time.sleep(ontime)
 
 # ------------------------------------------------------------------
@@ -440,7 +552,9 @@ def turn_vehicle(direction):
             motor_right.duty(0)
             motor_left.duty(0)
             time.sleep(offtime)
-        while not read_ir_sensor(middle_IR):
+        while True:
+            if read_ir_snapshot()["mid"] == 1:
+                break
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(ontime)
@@ -456,7 +570,9 @@ def turn_vehicle(direction):
             motor_right.duty(0)
             motor_left.duty(0)
             time.sleep(offtime)
-        while not read_ir_sensor(middle_IR):
+        while True:
+            if read_ir_snapshot()["mid"] == 1:
+                break
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(ontime)
@@ -476,7 +592,9 @@ def turn_in_roundabout(direction):
         time.sleep(offtime)
     if direction == 1:  # right
         motor_right.set_backwards()
-        while not read_ir_sensor(middle_IR):
+        while True:
+            if read_ir_snapshot()["mid"] == 1:
+                break
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(ontime)
@@ -485,7 +603,9 @@ def turn_in_roundabout(direction):
             time.sleep(offtime)
     elif direction == 0:  # left
         motor_left.set_backwards()
-        while not read_ir_sensor(middle_IR):
+        while True:
+            if read_ir_snapshot()["mid"] == 1:
+                break
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(ontime)
@@ -508,7 +628,9 @@ def turn_out_roundabout(direction):
 def turn_on_path(direction):
     if direction == 1:
         motor_right.set_backwards()
-        while not read_ir_sensor(middle_IR):
+        while True:
+            if read_ir_snapshot()["mid"] == 1:
+                break
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(ontime)
@@ -517,7 +639,9 @@ def turn_on_path(direction):
             time.sleep(offtime)
     elif direction == 0:
         motor_left.set_backwards()
-        while not read_ir_sensor(middle_IR):
+        while True:
+            if read_ir_snapshot()["mid"] == 1:
+                break
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(ontime)
@@ -531,28 +655,41 @@ def turn_on_path(direction):
 def roundabout():
     global direction_counter
     print_oled()
-    oled.text("Roundabout", 0,40)
+    oled.text("Roundabout", 0, 40)
+    oled.text(f"cnt:{direction_counter}", 0, 52)
     oled.show()
     print("Roundabout detected")
     stop()
     direction = select_direction()
     turn_in_roundabout(direction)
     path = direction
+    lost_confirm_count = 0
+    exit_confirm_count = 0
 
     while True:
         follow_line()
+        snapshot = read_ir_snapshot()
+        log_snapshot("roundabout", snapshot, f"lost={lost_confirm_count} exit={exit_confirm_count}")
 
         # Check if lost line completely
-        if (read_ir_sensor(middle_IR) == 0 and read_ir_sensor(center_left_IR) == 0 and
-            read_ir_sensor(center_right_IR) == 0 and read_ir_sensor(outer_left_IR) == 0 and
-            read_ir_sensor(outer_right_IR) == 0):
+        if is_all_zero_snapshot(snapshot):
+            lost_confirm_count += 1
+        else:
+            lost_confirm_count = 0
+
+        if lost_confirm_count >= line_lost_confirm_ticks:
             no_line()
             break
 
         # Exit detection
-        if ((read_ir_sensor(outer_right_IR) == 1) or (read_ir_sensor(outer_left_IR) == 1) or
-            (read_ir_sensor(center_right_IR) == 1 and read_ir_sensor(center_left_IR) == 1 and read_ir_sensor(middle_IR) == 1)):
-            if read_ir_sensor(middle_IR) == 1:
+        if (snapshot["or"] == 1 or snapshot["ol"] == 1 or
+            (snapshot["cr"] == 1 and snapshot["cl"] == 1 and snapshot["mid"] == 1)):
+            exit_confirm_count += 1
+        else:
+            exit_confirm_count = 0
+
+        if exit_confirm_count >= event_confirm_ticks:
+            if snapshot["mid"] == 1:
                 direction = select_direction()
                 if direction == 1 or direction == 0:
                     turn_out_roundabout(direction)
@@ -562,11 +699,12 @@ def roundabout():
                     break
             else:
                 print_oled()
-                oled.text("Roundabout: Exit w/o mid", 0,40)
+                oled.text("RA: exit no mid", 0, 40)
+                oled.text(f"ol={snapshot['ol']} or={snapshot['or']}", 0, 52)
                 oled.show()
-                if read_ir_sensor(outer_left_IR) == 1:
+                if snapshot["ol"] == 1:
                     exit_dir = 0
-                elif read_ir_sensor(outer_right_IR) == 1:
+                elif snapshot["or"] == 1:
                     exit_dir = 1
                 else:
                     exit_dir = 1
