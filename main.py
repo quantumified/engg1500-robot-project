@@ -53,7 +53,7 @@ def read_ir_sensor(pin, samples=ir_samples, delay_ms=ir_delay_ms):
         count += pin.value()
         if delay_ms > 0:
             time.sleep_ms(delay_ms)
-    return 1 if count >= ((samples // 2) + 1) else 0
+    return 1 if count > samples // 2 else 0
 
 def read_ir_snapshot(samples=ir_samples, delay_ms=ir_delay_ms):
     """
@@ -354,7 +354,11 @@ def median_value(values):
     if not values:
         return None
     sorted_values = sorted(values)
-    return sorted_values[len(sorted_values) // 2]
+    length = len(sorted_values)
+    middle = length // 2
+    if length % 2 == 1:
+        return sorted_values[middle]
+    return (sorted_values[middle - 1] + sorted_values[middle]) / 2
 
 def read_ultrasonic_filtered_pair():
     left_samples = []
