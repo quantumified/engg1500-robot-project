@@ -491,21 +491,18 @@ def process_sensors():
     elif is_all_zero_snapshot(snapshot):
         event = "line_lost"
 
+    # In process_sensors(), replace the pending block with:
     if event:
         if event == pending_event:
             pending_event_count += 1
         else:
             pending_event = event
             pending_event_count = 1
+
         if pending_event_count < event_confirm_ticks:
-            print(f"Pending event confirmation: {event} ({pending_event_count}/{event_confirm_ticks})")
-            # Keep line tracking active while waiting for one more matching snapshot.
-            follow_line()
-            time.sleep(ontime)
+            print(f"Pending {event} ({pending_event_count}/{event_confirm_ticks})")
+            # Do NOT call follow_line() here — just return so main loop runs again
             return
-    else:
-        pending_event = None
-        pending_event_count = 0
 
     if event == "roundabout":
         roundabout()
