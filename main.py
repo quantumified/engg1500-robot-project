@@ -31,7 +31,7 @@ collisiondist = 50 # mm
 centretollerance = 0.2 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.03
-offtime = 0.10
+offtime = 0.1
 
 # OLED bullshit
 #You can choose any other combination of I2C pins
@@ -306,19 +306,11 @@ def no_line():
     if (ultrasonic_left.distance_mm() > 150) and (ultrasonic_right.distance_mm() > 150):
         print("just no line")
         dont_turn_to_other_side = False
-        motor_left.set_forwards()
+        
+        turnvar = 8 # how fast does the vehicle turn
+        motor_left.set_backwards()
         motor_right.set_forwards()
-        for i in range(8):
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-            time.sleep(0.02)
-            stop()
-        if read_ir_sensor(middle_IR) or read_ir_sensor(center_left_IR) or read_ir_sensor(center_right_IR):
-            return
-                
-        motor_left.set_forwards()
-        motor_right.set_backwards()
-        for i in range(18):
+        for i in range(turnvar):
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(0.02)
@@ -343,7 +335,7 @@ def no_line():
                 stop()
                 time.sleep(0.1)
             return
-        for i in range(18):
+        for i in range(turnvar):
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(0.02)
@@ -369,9 +361,9 @@ def no_line():
                 time.sleep(0.1)
             return
         if (dont_turn_to_other_side == False):
-            motor_left.set_backwards()
-            motor_right.set_forwards()
-            for i in range(36):
+            motor_left.set_forwards()
+            motor_right.set_backwards()
+            for i in range(turnvar * 2):
                 motor_left.duty(slow)
                 motor_right.duty(slow)
                 time.sleep(0.02)
@@ -395,7 +387,7 @@ def no_line():
                     stop()
                     time.sleep(0.1)
                 return
-            for i in range(36):
+            for i in range(turnvar * 2):
                 motor_left.duty(slow)
                 motor_right.duty(slow)
                 time.sleep(0.02)
@@ -409,15 +401,7 @@ def no_line():
                         stop()
                         time.sleep(0.1)
                     return
-            motor_left.set_forwards()
-            motor_right.set_forwards()
-            for i in range(10):
-                motor_left.duty(slow)
-                motor_right.duty(slow)
-                time.sleep(0.02)
-                stop()
-                time.sleep(0.1)
-        return            
+        return              
 
     while True:
         if check_collision():
@@ -495,6 +479,103 @@ def no_line():
             print("Line reacquired")
             return
     
+def turn_left_first:
+    turnvar = 8 # how fast does the vehicle turn
+        motor_left.set_backwards()
+        motor_right.set_forwards()
+        for i in range(turnvar):
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            time.sleep(0.02)
+            stop()
+            time.sleep(0.1)
+            if read_ir_sensor(middle_IR) == 1:
+                for i in range(4):
+                    motor_left.duty(slow)
+                    motor_right.duty(slow)
+                    time.sleep(0.02)
+                    stop()
+                    time.sleep(0.1)
+                dont_turn_to_other_side = True
+                break
+        if (ultrasonic_left.distance_mm() < 100) or (ultrasonic_right.distance_mm() < 100):
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            for i in range(10):
+                motor_left.duty(slow)
+                motor_right.duty(slow)
+                time.sleep(0.02)
+                stop()
+                time.sleep(0.1)
+            return
+        for i in range(turnvar):
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            time.sleep(0.02)
+            stop()
+            time.sleep(0.1)
+            if read_ir_sensor(middle_IR) == 1:
+                for i in range(4):
+                    motor_left.duty(slow)
+                    motor_right.duty(slow)
+                    time.sleep(0.02)
+                    stop()
+                    time.sleep(0.1)
+                dont_turn_to_other_side = True
+                break
+        if (ultrasonic_left.distance_mm() < 100) or (ultrasonic_right.distance_mm() < 100):
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            for i in range(10):
+                motor_left.duty(slow)
+                motor_right.duty(slow)
+                time.sleep(0.02)
+                stop()
+                time.sleep(0.1)
+            return
+        if (dont_turn_to_other_side == False):
+            motor_left.set_forwards()
+            motor_right.set_backwards()
+            for i in range(turnvar * 2):
+                motor_left.duty(slow)
+                motor_right.duty(slow)
+                time.sleep(0.02)
+                stop()
+                time.sleep(0.1)
+                if read_ir_sensor(middle_IR) == 1:
+                    for i in range(4):
+                        motor_left.duty(slow)
+                        motor_right.duty(slow)
+                        time.sleep(0.02)
+                        stop()
+                        time.sleep(0.1)
+                    return
+            if (ultrasonic_left.distance_mm() < 100) or (ultrasonic_right.distance_mm() < 100):
+                motor_left.set_forwards()
+                motor_right.set_forwards()
+                for i in range(10):
+                    motor_left.duty(slow)
+                    motor_right.duty(slow)
+                    time.sleep(0.02)
+                    stop()
+                    time.sleep(0.1)
+                return
+            for i in range(turnvar * 2):
+                motor_left.duty(slow)
+                motor_right.duty(slow)
+                time.sleep(0.02)
+                stop()
+                time.sleep(0.1)
+                if read_ir_sensor(middle_IR) == 1:
+                    for i in range(4):
+                        motor_left.duty(slow)
+                        motor_right.duty(slow)
+                        time.sleep(0.02)
+                        stop()
+                        time.sleep(0.1)
+                    return
+        return    
+
 def stop():
     motor_left.duty(0)
     motor_right.duty(0)
@@ -527,6 +608,13 @@ def process_sensors():
         print_oled()
         oled.text("Unknown: Defaulting", 0,40)
         oled.show()
+        motor_left.set_forwards()
+        motor_right.set_forwards()
+        for i in range(8):
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            time.sleep(0.02)
+            stop()
         follow_line()
     time.sleep(ontime)
 
