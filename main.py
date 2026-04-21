@@ -11,8 +11,8 @@ center_right_IR = Pin(22, Pin.IN)
 center_left_IR = Pin(20, Pin.IN)
 outer_right_IR = Pin(18, Pin.IN)
 outer_left_IR = Pin(19, Pin.IN)
-motor_left  = Motor("Left", 11, 10, 7) #probably need to find way to make them slower without duty reduction, maybe make a pwm of a pwm??
-motor_right = Motor("Right", 9, 8, 6)
+motor_left  = Motor("left", 11, 10, 7) #probably need to find way to make them slower without duty reduction, maybe make a pwm of a pwm??
+motor_right = Motor("right", 9, 8, 6)
 ultrasonic_front = sonic(14, 15)
 ultrasonic_left  = sonic(3, 2) #same for these
 ultrasonic_right = sonic(12, 13)
@@ -867,4 +867,3 @@ while True:
     else:
         stop()
         time.sleep(0.1)
-
