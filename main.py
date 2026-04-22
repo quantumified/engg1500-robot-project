@@ -11,14 +11,18 @@ center_right_IR = Pin(22, Pin.IN)
 center_left_IR = Pin(20, Pin.IN)
 outer_right_IR = Pin(18, Pin.IN)
 outer_left_IR = Pin(19, Pin.IN)
-motor_left  = Motor("left", 11, 10, 7) #probably need to find way to make them slower without duty reduction, maybe make a pwm of a pwm??
-motor_right = Motor("right", 9, 8, 6)
+motor_left  = Motor("Left", 11, 10, 7) #probably need to find way to make them slower without duty reduction, maybe make a pwm of a pwm??
+motor_right = Motor("Right", 9, 8, 6)
 ultrasonic_front = sonic(14, 15)
 ultrasonic_left  = sonic(3, 2) #same for these
 ultrasonic_right = sonic(12, 13)
 
 #global counters
 direction_counter = 0
+main_loop_iteration = 0
+EARLY_LOST_THRESHOLD = 20          # Number of main loop cycles to check
+forced_right_done = False          # Only do this once
+returning_home = False
 
 # Setup important constants
 slow = 47
@@ -31,29 +35,23 @@ collisiondist = 50 # mm
 centretollerance = 0.2 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.03
-offtime = 0.1
+offtime = 0.10
 
 # OLED bullshit
 #You can choose any other combination of I2C pins
 i2c = SoftI2C(scl=Pin(5), sda=Pin(4))
-
-# Creates an object for the display using the class in the ssd1306 driver
-oled_width = 128
-oled_height = 64
-oled = ssd1306.SSD1306_I2C(oled_width, oled_height, i2c)
-
-oled.text('Left', 0, 0)
-oled.text('Mid', 50, 0)
-oled.text('Right', 90, 0)
-oled.text("Current Function", 0, 30)
+oled = ssd1306.SSD1306_I2C(128, 64, i2c)
 oled.invert(True)
-oled.show()
 
-def print_oled():
+def print_oled(label=""):
     oled.fill(0)
-    oled.text(str(center_left_IR.value()), 0, 10)
-    oled.text(str(middle_IR.value()), 50, 10)
-    oled.text(str(center_right_IR.value()), 90, 10)
+    oled.text("OL:" + str(outer_left_IR.value()),  0,  10)
+    oled.text("CL:" + str(center_left_IR.value()), 45, 10)
+    oled.text("M:"  + str(middle_IR.value()),       85, 10)
+    oled.text("CR:" + str(center_right_IR.value()),  0, 20)
+    oled.text("OR:" + str(outer_right_IR.value()),  45, 20)
+    if label:
+        oled.text(label[:20], 0, 40)
     oled.show()
     
 def read_ir_sensor(pin, samples=5, delay_ms=2):
@@ -69,15 +67,12 @@ def read_ir_sensor(pin, samples=5, delay_ms=2):
 
 # Check front ultrasonic only false if clear
 def check_collision():
-    print_oled()
-    oled.text("check collision", 0, 40)
-    oled.show()
     front_mm = ultrasonic_front.distance_mm()
     if front_mm < 0: #error
         print("ERROR: negative ultrasonic dist, continuing")
         return False
     elif front_mm < collisiondist: #collision
-        print(f"Collision: {front_mm} mm room left")
+        print_oled(f"COLLISION:{dist}mm")
         stop()
         return True
     return False
@@ -93,10 +88,7 @@ def drive_forward():
 # follow_line with improved recovery and debouncing
 # ------------------------------------------------------------------
 def follow_line():
-    print_oled()
-    oled.text("Follow line", 0, 40)
-    oled.show()
-    print("Follow line running")
+    print_oled("Follow line")
 
     zero_count = 0
     MAX_ZERO_BEFORE_RECOVERY = 3  # Try small wiggle before giving up entirely
@@ -129,9 +121,7 @@ def follow_line():
             motor_right.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
-            print_oled()
-            oled.text("Follow: Straight", 0, 40)
-            oled.show()
+            print_oled("FL: Straight")
 
         # Right deviation
         elif (cr == 1 and cl == 0 and mid == 0) or (or_ == 1 and cl == 0 and mid == 0):
@@ -139,17 +129,13 @@ def follow_line():
             motor_right.set_forwards()
             motor_left.duty(outsidewheel_left)
             motor_right.duty(insidewheel)
-            print_oled()
-            oled.text("Follow: Right", 0, 40)
-            oled.show()
+            print_oled("FL: Right")
         elif (cr == 1 and cl == 0 and mid == 1):
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(outsidewheel)
             motor_right.duty(insidewheel_slow)
-            print_oled()
-            oled.text("Follow: Right", 0, 40)
-            oled.show()
+            print_oled("FL: Right")
 
         # Left deviation
         elif (cl == 1 and cr == 0 and mid == 0) or (ol == 1 and cr == 0 and mid == 0):
@@ -157,52 +143,42 @@ def follow_line():
             motor_right.set_forwards()
             motor_left.duty(insidewheel)
             motor_right.duty(outsidewheel)
-            print_oled()
-            oled.text("Follow: Left", 0, 40)
-            oled.show()
+            print_oled("FL: Left")
         elif (cl == 1 and cr == 0 and mid == 1):
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(insidewheel_slow)
             motor_right.duty(outsidewheel_slow)
-            print_oled()
-            oled.text("Follow: Left", 0, 40)
-            oled.show()
+            print_oled("FL: Left")
 
         # Recovery: only outer sensor sees line
-        elif (ol == 1 and cl == 0 and cr == 0 and mid == 0 and or_ == 0) or (or_ == 1 and cl == 0 and cr == 0 and mid == 0 and ol == 0):
+        elif (ol == 1 and cr == 0 and mid == 0 and or_ == 0) or (or_ == 1 and cl == 0 and mid == 0 and ol == 0):
             if ol == 1:
-                motor_left.set_forwards()
+                motor_left.set_backwards()
                 motor_right.set_forwards()
                 motor_left.duty(insidewheel)
                 motor_right.duty(outsidewheel)
-                print_oled()
-                oled.text("Recover: Left", 0, 40)
-                oled.show()
+                print_oled("Recover: Left")
             elif or_ == 1:
                 motor_left.set_forwards()
-                motor_right.set_forwards()
+                motor_right.set_backwards()
                 motor_left.duty(outsidewheel)
                 motor_right.duty(insidewheel)
-                print_oled()
-                oled.text("Recover: Right", 0, 40)
-                oled.show()
+                print_oled("Recover: Right")
         else:
             # Unexpected pattern; exit and re-evaluate
             stop()
             break
 
-        time.sleep(ontime)
+        time.sleep(3 * ontime)
         stop()
-        time.sleep(offtime)
+        time.sleep(offtime / 2)
 
 # ------------------------------------------------------------------
 # handle_stub with correct direction
 # ------------------------------------------------------------------
 def handle_stub(side):
-    print_oled()
-    oled.text(f"handle stub: {side}", 0, 40)
-    oled.show()
+    print_oled(f"handle stub: {side}")
     print(f"Stub detected ({side})")
     if check_collision():
         return
@@ -242,9 +218,7 @@ def handle_stub(side):
 # detect_y_intersection (unchanged but using debounced reads)
 # ------------------------------------------------------------------
 def detect_y_intersection(side):
-    print_oled()
-    oled.text(f"Y intersection: {side}", 0, 40)
-    oled.show()
+    print_oled(f"Y intersection: {side}")
     stop()
     print(f"Y Intersection detected: taking {side} path.")
     time.sleep(0.1)
@@ -291,13 +265,53 @@ def detect_y_intersection(side):
     motor_left.duty(slow)
     motor_right.duty(slow)
 
+
+# Function that's called once the robot has passed all roundabouts, and hits the y-intersection from the left.
+# Only adjusts to the right, so it avoids accidentally just going back onto the course.
+
+def exit_course():
+    """
+    Follow line while returning home. Only corrects to the right.
+    If line is lost, calls no_line() to navigate into garage using ultrasonics.
+    """
+    print_oled("Exit Course")
+    
+    while not check_collision():
+        mid = read_ir_sensor(middle_IR)
+        cl  = read_ir_sensor(center_left_IR)
+        cr  = read_ir_sensor(center_right_IR)
+        ol  = read_ir_sensor(outer_left_IR)
+        or_ = read_ir_sensor(outer_right_IR)
+
+        # If all sensors are off, line is lost – use hallway/no_line code
+        if mid == 0 and cl == 0 and cr == 0 and ol == 0 and or_ == 0:
+            no_line()
+            break
+
+        # If the line is on the left side (cl or ol active) – pivot RIGHT to bring it back
+        if cl == 1 or ol == 1:
+            motor_left.set_forwards()
+            motor_right.set_backwards()
+            motor_left.duty(insidewheel)   # adjust these values if needed
+            motor_right.duty(insidewheel)
+            print_oled("Exit: Right")
+        else:
+            # Otherwise go straight (even if line is on right – we don't turn left)
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            print_oled("Exit: Straight")
+
+        time.sleep(ontime)
+        stop()
+        time.sleep(offtime)
+
 # ------------------------------------------------------------------
 # no_line with timeout and corrected adjustment directions
 # ------------------------------------------------------------------
 def no_line():
-    print_oled()
-    oled.text("No line", 0,40)
-    oled.show()
+    print_oled("No line")
     print("No line: ultrasonic sensing")
 
     start_time = time.time()
@@ -305,12 +319,21 @@ def no_line():
     
     if (ultrasonic_left.distance_mm() > 150) and (ultrasonic_right.distance_mm() > 150):
         print("just no line")
+        print_oled("NL: Searching")
         dont_turn_to_other_side = False
-        
-        turnvar = 8 # how fast does the vehicle turn
-        motor_left.set_backwards()
+        motor_left.set_forwards()
         motor_right.set_forwards()
-        for i in range(turnvar):
+        for i in range(8):
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+            time.sleep(0.02)
+            stop()
+        if read_ir_sensor(middle_IR) or read_ir_sensor(center_left_IR) or read_ir_sensor(center_right_IR):
+            return
+                
+        motor_left.set_forwards()
+        motor_right.set_backwards()
+        for i in range(18):
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(0.02)
@@ -335,7 +358,7 @@ def no_line():
                 stop()
                 time.sleep(0.1)
             return
-        for i in range(turnvar):
+        for i in range(18):
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(0.02)
@@ -361,9 +384,9 @@ def no_line():
                 time.sleep(0.1)
             return
         if (dont_turn_to_other_side == False):
-            motor_left.set_forwards()
-            motor_right.set_backwards()
-            for i in range(turnvar * 2):
+            motor_left.set_backwards()
+            motor_right.set_forwards()
+            for i in range(36):
                 motor_left.duty(slow)
                 motor_right.duty(slow)
                 time.sleep(0.02)
@@ -387,7 +410,7 @@ def no_line():
                     stop()
                     time.sleep(0.1)
                 return
-            for i in range(turnvar * 2):
+            for i in range(36):
                 motor_left.duty(slow)
                 motor_right.duty(slow)
                 time.sleep(0.02)
@@ -401,7 +424,15 @@ def no_line():
                         stop()
                         time.sleep(0.1)
                     return
-        return              
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            for i in range(10):
+                motor_left.duty(slow)
+                motor_right.duty(slow)
+                time.sleep(0.02)
+                stop()
+                time.sleep(0.1)
+        return            
 
     while True:
         if check_collision():
@@ -415,6 +446,7 @@ def no_line():
         right_mm = ultrasonic_right.distance_mm()
         if left_mm <= 0 or right_mm <= 0:
             print("Ultrasonic error, skipping cycle")
+            print_oled("US Err. Skip cycle")
             time.sleep(0.05)
             continue
 
@@ -424,7 +456,8 @@ def no_line():
 
         # Center tolerance
         if (left_mm > 150) and (right_mm > 150):
-            print ("no line after hallway")
+            print("no line after hallway")
+            print_oled("NL after hallway")
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(slow)
@@ -441,9 +474,7 @@ def no_line():
             motor_right.set_backwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
-            print_oled()
-            oled.text("No line: Turn right", 0,40)
-            oled.show()
+            print_oled("No Line: Turn Right")
             time.sleep(0.05)
             stop()
             time.sleep(offtime)
@@ -457,9 +488,7 @@ def no_line():
             motor_right.set_forwards()
             motor_left.duty(slow)
             motor_right.duty(slow)
-            print_oled()
-            oled.text("No line: Turn left", 0,40)
-            oled.show()
+            print_oled("No Line: Turn Left")
             time.sleep(0.05)
             stop()
             time.sleep(offtime)
@@ -479,103 +508,6 @@ def no_line():
             print("Line reacquired")
             return
     
-def turn_left_first:
-    turnvar = 8 # how fast does the vehicle turn
-        motor_left.set_backwards()
-        motor_right.set_forwards()
-        for i in range(turnvar):
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-            time.sleep(0.02)
-            stop()
-            time.sleep(0.1)
-            if read_ir_sensor(middle_IR) == 1:
-                for i in range(4):
-                    motor_left.duty(slow)
-                    motor_right.duty(slow)
-                    time.sleep(0.02)
-                    stop()
-                    time.sleep(0.1)
-                dont_turn_to_other_side = True
-                break
-        if (ultrasonic_left.distance_mm() < 100) or (ultrasonic_right.distance_mm() < 100):
-            motor_left.set_forwards()
-            motor_right.set_forwards()
-            for i in range(10):
-                motor_left.duty(slow)
-                motor_right.duty(slow)
-                time.sleep(0.02)
-                stop()
-                time.sleep(0.1)
-            return
-        for i in range(turnvar):
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-            time.sleep(0.02)
-            stop()
-            time.sleep(0.1)
-            if read_ir_sensor(middle_IR) == 1:
-                for i in range(4):
-                    motor_left.duty(slow)
-                    motor_right.duty(slow)
-                    time.sleep(0.02)
-                    stop()
-                    time.sleep(0.1)
-                dont_turn_to_other_side = True
-                break
-        if (ultrasonic_left.distance_mm() < 100) or (ultrasonic_right.distance_mm() < 100):
-            motor_left.set_forwards()
-            motor_right.set_forwards()
-            for i in range(10):
-                motor_left.duty(slow)
-                motor_right.duty(slow)
-                time.sleep(0.02)
-                stop()
-                time.sleep(0.1)
-            return
-        if (dont_turn_to_other_side == False):
-            motor_left.set_forwards()
-            motor_right.set_backwards()
-            for i in range(turnvar * 2):
-                motor_left.duty(slow)
-                motor_right.duty(slow)
-                time.sleep(0.02)
-                stop()
-                time.sleep(0.1)
-                if read_ir_sensor(middle_IR) == 1:
-                    for i in range(4):
-                        motor_left.duty(slow)
-                        motor_right.duty(slow)
-                        time.sleep(0.02)
-                        stop()
-                        time.sleep(0.1)
-                    return
-            if (ultrasonic_left.distance_mm() < 100) or (ultrasonic_right.distance_mm() < 100):
-                motor_left.set_forwards()
-                motor_right.set_forwards()
-                for i in range(10):
-                    motor_left.duty(slow)
-                    motor_right.duty(slow)
-                    time.sleep(0.02)
-                    stop()
-                    time.sleep(0.1)
-                return
-            for i in range(turnvar * 2):
-                motor_left.duty(slow)
-                motor_right.duty(slow)
-                time.sleep(0.02)
-                stop()
-                time.sleep(0.1)
-                if read_ir_sensor(middle_IR) == 1:
-                    for i in range(4):
-                        motor_left.duty(slow)
-                        motor_right.duty(slow)
-                        time.sleep(0.02)
-                        stop()
-                        time.sleep(0.1)
-                    return
-        return    
-
 def stop():
     motor_left.duty(0)
     motor_right.duty(0)
@@ -585,6 +517,7 @@ def stop():
 # ------------------------------------------------------------------
 def process_sensors():
     stop()
+    print_oled("Process Sensors")
     mid = read_ir_sensor(middle_IR)
     cl  = read_ir_sensor(center_left_IR)
     cr  = read_ir_sensor(center_right_IR)
@@ -592,6 +525,11 @@ def process_sensors():
     or_ = read_ir_sensor(outer_right_IR)
 
     #print(f"process_sensors: mid={mid} cl={cl} cr={cr} ol={ol} or={or_}")
+    
+    if returning_home:
+        if (ol + cl + mid + cr + or_) > 2 or (cl == 1 and cr == 1):
+            exit_course()
+            return
 
     if (cl == 1 and cr == 1 and mid == 1) or (cl == 1 and cr == 1 and mid == 0) or (ol == 1 and or_ == 1 and mid == 0):
         roundabout() #y-intesection is also handled with the roundabout method
@@ -605,16 +543,7 @@ def process_sensors():
         follow_line()
     else:
         print("ERROR: Unknown scenario, defaulting to follow_line")
-        print_oled()
-        oled.text("Unknown: Defaulting", 0,40)
-        oled.show()
-        motor_left.set_forwards()
-        motor_right.set_forwards()
-        for i in range(8):
-            motor_left.duty(slow)
-            motor_right.duty(slow)
-            time.sleep(0.02)
-            stop()
+        print_oled("Unknown. Def follow line")
         follow_line()
     time.sleep(ontime)
 
@@ -664,6 +593,87 @@ def turn_vehicle(direction):
     else:
         pass
     
+# _________________________________________
+# Roundabout Bullshit. So much redundancy
+# _________________________________________
+
+
+def recover_from_lost_in_roundabout():
+    print_oled("Recover Roundabout")
+    # Pivot left a bit
+    motor_left.set_backwards()
+    motor_right.set_forwards()
+    for _ in range(5):
+        motor_left.duty(slow)
+        motor_right.duty(slow)
+        time.sleep(0.05)
+        stop()
+        time.sleep(0.05)
+        if read_ir_sensor(middle_IR) or read_ir_sensor(center_left_IR) or read_ir_sensor(center_right_IR):
+            return
+    # Pivot right a bit
+    motor_left.set_forwards()
+    motor_right.set_backwards()
+    for _ in range(10):
+        motor_left.duty(slow)
+        motor_right.duty(slow)
+        time.sleep(0.05)
+        stop()
+        time.sleep(0.05)
+        if read_ir_sensor(middle_IR) or read_ir_sensor(center_left_IR) or read_ir_sensor(center_right_IR):
+            return
+    # Drive forward a little
+    drive_forward()
+    time.sleep(0.3)
+    stop()
+
+def follow_line_roundabout():
+    # Follow line inside roundabout. Returns True if an exit is seen
+    while not check_collision():
+        mid = read_ir_sensor(middle_IR)
+        cl  = read_ir_sensor(center_left_IR)
+        cr  = read_ir_sensor(center_right_IR)
+        ol  = read_ir_sensor(outer_left_IR)
+        or_ = read_ir_sensor(outer_right_IR)
+
+        # If we see a possible exit pattern, return to let roundabout() handle it
+        if (ol == 1 and mid == 1) or (or_ == 1 and mid == 1) or (cl == 1 and cr == 1 and mid == 1):
+            return True
+
+        # All sensors off – lost line (maybe we drifted inside roundabout)
+        if mid == 0 and cl == 0 and cr == 0 and ol == 0 and or_ == 0:
+            return False   # signal that we lost the line
+
+        # Normal line following (similar to follow_line but without breaking on stubs)
+        if mid == 1 and cl == 0 and cr == 0:
+            print_oled("Round Straight")
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            motor_left.duty(slow)
+            motor_right.duty(slow)
+        elif (cr == 1 and cl == 0) or (or_ == 1 and cl == 0):
+            print_oled("Round Right")
+            motor_left.set_forwards()
+            motor_right.set_backwards()
+            motor_left.duty(outsidewheel_left)
+            motor_right.duty(insidewheel)
+            time.sleep(0.08)
+            motor_right.set_forwards()
+        elif (cl == 1 and cr == 0) or (ol == 1 and cr == 0):
+            print_oled("Round Left")
+            motor_left.set_forwards()
+            motor_right.set_forwards()
+            motor_left.duty(insidewheel)
+            motor_right.duty(outsidewheel)
+        else:
+            # Unexpected pattern, just keep last command briefly
+            pass
+
+        time.sleep(3 * ontime)
+        stop()
+        time.sleep(offtime / 2)
+    return False
+
 def turn_in_roundabout(direction):
     motor_left.set_forwards()
     motor_right.set_forwards()
@@ -697,17 +707,50 @@ def turn_in_roundabout(direction):
         pass
     
 def turn_out_roundabout(direction):
+    global returning_home
+    print_oled(f"Exit: {'RIGHT' if direction == 1 else 'LEFT'}")
+    
+    # 1. Drive forward a bit to center over the intersection
     motor_left.set_forwards()
     motor_right.set_forwards()
-    for i in range(8):
-        motor_left.duty(50)
-        motor_right.duty(50)
-        time.sleep(0.02)
-        motor_right.duty(0)
-        motor_left.duty(0)
-        time.sleep(0.02)
-        
-    turn_on_path(direction)
+    motor_left.duty(slow)
+    motor_right.duty(slow)
+    time.sleep(0.15)   # adjust as needed
+    stop()
+    time.sleep(0.05)
+    
+    # 2. Pivot in the chosen direction until the middle sensor sees the line again
+    if direction == 1:   # right
+        motor_left.set_forwards()
+        motor_right.set_backwards()
+    elif direction == 0: # left
+        motor_left.set_backwards()
+        motor_right.set_forwards()
+    else:
+        return
+    
+    start = time.time()
+    timeout = 5.0  # seconds – prevents infinite loop
+    
+    while time.time() - start < timeout:
+        motor_left.duty(slow)
+        motor_right.duty(slow)
+        time.sleep(0.08)
+        stop()
+        time.sleep(offtime)
+        if read_ir_sensor(middle_IR) == 1:
+            break
+    
+    # 3. Drive forward a little to fully clear the exit
+    motor_left.set_forwards()
+    motor_right.set_forwards()
+    motor_left.duty(slow)
+    motor_right.duty(slow)
+    time.sleep(0.5)
+    stop()
+    if direction_counter >= 7:
+        returning_home = True
+    print_oled("Exit complete")
 
 def turn_on_path(direction):
     if direction == 1: #right
@@ -732,37 +775,46 @@ def turn_on_path(direction):
         pass
 
 def roundabout():
-    print_oled()
-    oled.text("roundabout", 0, 40)
-    oled.show()
-    print("Roundabout detected")
+    print_oled("Roundabout")
     stop()
-    direction = select_direction()
+    direction = select_direction()   # first call: initial entry turn
     turn_in_roundabout(direction)
-    path = direction #in which direction the vehicle drives
-    
+    path = direction
+
     while True:
-        follow_line()
-        if ((outer_right_IR.value() == 1) or (outer_left_IR.value() == 1) or (center_right_IR.value() == 1 and center_left_IR.value() == 1 and middle_IR.value() == 1)):
-            if (middle_IR.value() == 1): #helpful?????
-                direction = select_direction()
-                if ((direction == 1) or (direction == 0)): #1:right, 0:left
-                    turn_out_roundabout(direction)
-                    break
-                else:
-                    skip_distraction_line()
-                    if (path == 1):
-                        turn_on_path(0)
-                    else:
-                        turn_on_path(1)
+        # Use the dedicated roundabout follower
+        exit_seen = follow_line_roundabout()
+        
+        if not exit_seen:
+            # Lost the line – try to recover by small search
+            # (maybe just pivot slightly until line found)
+            recover_from_lost_in_roundabout()
+            continue
+
+        # Now check if we are at a real exit
+        mid = read_ir_sensor(middle_IR)
+        ol  = read_ir_sensor(outer_left_IR)
+        or_ = read_ir_sensor(outer_right_IR)
+        cl  = read_ir_sensor(center_left_IR)
+        cr  = read_ir_sensor(center_right_IR)
+
+        # Valid exit condition (middle + at least one outer, or all three centers)
+        if (mid == 1 and (ol == 1 or or_ == 1)) or (cl == 1 and cr == 1 and mid == 1):
+            direction = select_direction()   # get exit direction
+            if direction in (0, 1):
+                turn_out_roundabout(direction)
+                time.sleep(0.2)
+                break
             else:
-                #faulthandling
-                pass
+                # direction == 2 means skip this exit (straight)
+                skip_distraction_line()
+                # keep path variable unchanged
+        else:
+            # False trigger – continue following
+            pass
             
 def follow_line_roundi():
-    print_oled()
-    oled.text("follow line", 0, 40)
-    oled.show()
+    print_oled("Follow Line Round")
     print("follow line running")
     while not check_collision():
         # Centred: go straight 
@@ -804,7 +856,7 @@ def follow_line_roundi():
 
 def select_direction():
     #0 = left, 1 = right, 2 = straight
-    richtungen = [0, 0, 0, 2, 0, 1, 1]#for every intersection in roundabout one direction
+    richtungen = [0, 0, 0, 2, 0, 0, 0]#for every intersection in roundabout one direction
     global direction_counter
     
     if direction_counter < len(richtungen):
@@ -849,21 +901,46 @@ def init():
 motor_left.set_forwards()
 motor_right.set_forwards()
 print("Initialising systems... (1s)")
-print_oled()
-oled.text("Initialising systems... (1s)", 0,40)
-oled.show()
+print_oled("Initialising systems... (1s)")
 time.sleep(1)
 print("Running ✅")
-print_oled()
-oled.text("Running... ✅", 0,40)
-oled.show()
+print_oled("Running... ✅")
 time.sleep(1)
 drive_forward()
 
 # Main loop
-while True:        
-    if not check_collision(): # if false runs this
-        process_sensors() # need to ensure follow_line is disabled/cancelled when another function is triggered ASAP!
+while True:
+    main_loop_iteration += 1
+
+    if not check_collision():
+        # --- EARLY LOST FALLBACK ---
+        if (not forced_right_done and 
+            main_loop_iteration <= EARLY_LOST_THRESHOLD and
+            middle_IR.value() == 0 and 
+            center_left_IR.value() == 0 and 
+            center_right_IR.value() == 0 and
+            outer_left_IR.value() == 0 and 
+            outer_right_IR.value() == 0):
+            
+            print("Early lost detected – forcing RIGHT turn")
+            print_oled("Y-int. Go Right")
+            
+            # Drive forward a bit to clear the intersection
+            drive_forward()
+            time.sleep(0.2)   # Adjust distance as needed
+            stop()
+            
+            # Perform the right turn (pivot on the spot)
+            turn_vehicle(1)   # 1 = right turn
+            
+            forced_right_done = True
+            # After this, normal process_sensors() will take over
+            # (It will likely find the line again and follow it.)
+            continue
+        # --- END FALLBACK ---
+
+        process_sensors()
     else:
         stop()
         time.sleep(0.1)
+
