@@ -26,16 +26,21 @@ returning_home = False
 
 # Setup important constants
 slow = 47
+slow_right = 53
 outsidewheel = 50
-outsidewheel_left = 55
+outsidewheel_left = 50
 insidewheel = 40
 outsidewheel_slow = 45
 insidewheel_slow = 40
 collisiondist = 50 # mm 
 centretollerance = 0.2 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
-ontime = 0.03
-offtime = 0.10
+ontime = 0.02
+offtime = 0.2
+
+find_track_var = 18
+init_drive_out_of_garage = 0.4
+time_burst_out_of_roundabout = 0.2
 
 # OLED bullshit
 #You can choose any other combination of I2C pins
@@ -116,11 +121,11 @@ def follow_line():
             break
 
         # Centered: straight
-        if mid == 1 and cl == 0 and cr == 0:
+        if (mid == 1 and cl == 0 and cr == 0) or (mid == 1 and or_ == 1 and cr == 1) or (mid == 1 and ol == 1 and cl == 1):
             motor_left.set_forwards()
             motor_right.set_forwards()
             motor_left.duty(slow)
-            motor_right.duty(slow)
+            motor_right.duty(slow_right)
             print_oled("FL: Straight")
 
         # Right deviation
@@ -214,58 +219,6 @@ def handle_stub(side):
         print("ERROR: stub error, stopped.")
         return
 
-# ------------------------------------------------------------------
-# detect_y_intersection (unchanged but using debounced reads)
-# ------------------------------------------------------------------
-def detect_y_intersection(side):
-    print_oled(f"Y intersection: {side}")
-    stop()
-    print(f"Y Intersection detected: taking {side} path.")
-    time.sleep(0.1)
-
-    if side == "LEFT":
-        motor_left.set_backwards()
-        motor_right.set_forwards()
-        motor_left.duty(slow)
-        motor_right.duty(slow)
-        time.sleep(0.1)
-        start = time.time()
-        while True:
-            if time.time() - start > pivottimeout:
-                print("ERROR: Y-intersection LEFT pivot timed out")
-                stop()
-                return
-            if read_ir_sensor(middle_IR) == 1 and read_ir_sensor(center_right_IR) == 0:
-                break
-            time.sleep(ontime)
-
-    elif side == "RIGHT":
-        motor_right.set_backwards()
-        motor_left.set_forwards()
-        motor_right.duty(slow)
-        motor_left.duty(slow)
-        time.sleep(0.1)
-        start = time.time()
-        while True:
-            if time.time() - start > pivottimeout:
-                print("ERROR: Y-intersection RIGHT pivot timed out")
-                stop()
-                return
-            if read_ir_sensor(middle_IR) == 1 and read_ir_sensor(center_left_IR) == 0:
-                break
-            time.sleep(ontime)
-    else:
-        print(f"ERROR: detect_y_intersection: {side}, stopping.")
-        stop()
-        return
-
-    time.sleep(0.05)
-    motor_left.set_forwards()
-    motor_right.set_forwards()
-    motor_left.duty(slow)
-    motor_right.duty(slow)
-
-
 # Function that's called once the robot has passed all roundabouts, and hits the y-intersection from the left.
 # Only adjusts to the right, so it avoids accidentally just going back onto the course.
 
@@ -333,7 +286,7 @@ def no_line():
                 
         motor_left.set_forwards()
         motor_right.set_backwards()
-        for i in range(18):
+        for i in range(find_track_var):
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(0.02)
@@ -358,7 +311,7 @@ def no_line():
                 stop()
                 time.sleep(0.1)
             return
-        for i in range(18):
+        for i in range(find_track_var):
             motor_left.duty(slow)
             motor_right.duty(slow)
             time.sleep(0.02)
@@ -386,7 +339,7 @@ def no_line():
         if (dont_turn_to_other_side == False):
             motor_left.set_backwards()
             motor_right.set_forwards()
-            for i in range(36):
+            for i in range(find_track_var * 2):
                 motor_left.duty(slow)
                 motor_right.duty(slow)
                 time.sleep(0.02)
@@ -410,7 +363,7 @@ def no_line():
                     stop()
                     time.sleep(0.1)
                 return
-            for i in range(36):
+            for i in range(find_track_var * 2):
                 motor_left.duty(slow)
                 motor_right.duty(slow)
                 time.sleep(0.02)
@@ -534,9 +487,11 @@ def process_sensors():
     if (cl == 1 and cr == 1 and mid == 1) or (cl == 1 and cr == 1 and mid == 0) or (ol == 1 and or_ == 1 and mid == 0):
         roundabout() #y-intesection is also handled with the roundabout method
     elif ol == 1 and or_ == 0 and mid == 1:
-        handle_stub("LEFT")
+        follow_line()
+        #handle_stub("LEFT")
     elif or_ == 1 and ol == 0 and mid == 1:
-        handle_stub("RIGHT")
+        follow_line()
+        #handle_stub("RIGHT")
     elif cl == 0 and cr == 0 and mid == 0:
         no_line()
     elif (cl == 0 and cr == 0 and mid == 1) or (cl == 0 and mid == 0 and cr == 1) or (cl == 1 and mid == 0 and cr == 0):
@@ -746,7 +701,7 @@ def turn_out_roundabout(direction):
     motor_right.set_forwards()
     motor_left.duty(slow)
     motor_right.duty(slow)
-    time.sleep(0.5)
+    time.sleep(time_burst_out_of_roundabout)
     stop()
     if direction_counter >= 7:
         returning_home = True
@@ -927,7 +882,7 @@ while True:
             
             # Drive forward a bit to clear the intersection
             drive_forward()
-            time.sleep(0.2)   # Adjust distance as needed
+            time.sleep(init_drive_out_of_garage)   # Adjust distance as needed
             stop()
             
             # Perform the right turn (pivot on the spot)
