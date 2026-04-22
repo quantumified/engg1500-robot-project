@@ -40,7 +40,7 @@ offtime = 0.14
 
 find_track_var = 20
 init_drive_out_of_garage = 0.45
-time_burst_out_of_roundabout = 0.2
+time_burst_out_of_roundabout = 0.1
 
 # OLED bullshit
 #You can choose any other combination of I2C pins
@@ -501,6 +501,10 @@ def no_line():
             read_ir_sensor(center_right_IR)):
             print("Line reacquired")
             return
+    
+def stop():
+    motor_left.duty(0)
+    motor_right.duty(0)
     
 # ------------------------------------------------------------------
 # process_sensors with debounced reads
