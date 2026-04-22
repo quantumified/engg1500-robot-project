@@ -36,10 +36,10 @@ collisiondist = 50 # mm
 centretollerance = 0.2 # tolerance for left/right ratio for no_line
 pivottimeout = 3.0 # sec
 ontime = 0.02
-offtime = 0.2
+offtime = 0.14
 
-find_track_var = 18
-init_drive_out_of_garage = 0.4
+find_track_var = 20
+init_drive_out_of_garage = 0.45
 time_burst_out_of_roundabout = 0.2
 
 # OLED bullshit
@@ -898,4 +898,5 @@ while True:
     else:
         stop()
         time.sleep(0.1)
+
 
